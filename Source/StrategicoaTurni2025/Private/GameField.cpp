@@ -1,13 +1,14 @@
-#include "MapGenerator.h"
+#include "GameField.h"
+#include "Tile.h"  
 #include "Math/UnrealMathUtility.h"
 
-AMapGenerator::AMapGenerator()
+AGameField::AGameField()
 {
     // Disattiviamo il Tick, non ci serve aggiornare la mappa ogni singolo frame
     PrimaryActorTick.bCanEverTick = false;
 }
 
-void AMapGenerator::BeginPlay()
+void AGameField::BeginPlay()
 {
     Super::BeginPlay();
 
@@ -18,7 +19,7 @@ void AMapGenerator::BeginPlay()
     
 }
 
-void AMapGenerator::GenerateGridData()
+void AGameField::GenerateGridData()
 {
     bool bIsMapValid = false;
 
@@ -81,19 +82,43 @@ void AMapGenerator::GenerateGridData()
         }
         bIsMapValid = IsMapFullyConnected();
     }
+
+    // --- SPAWN DEGLI ATTORI INTELLIGENTI ---
+    // Svuotiamo la mappa precedente se esiste
+    TileMap.Empty();
+
     for (const FGridCell& Cell : GridData)
     {
+        // Calcoliamo la posizione (Z leggermente alzata per l'elevazione)
         FVector SpawnLocation = FVector(Cell.X * CellSize, Cell.Y * CellSize, Cell.Elevation * (CellSize / 2.0f));
-        FRotator SpawnRotation = FRotator::ZeroRotator;
 
-        if (CellBlueprint != nullptr)
+        if (TileClass != nullptr)
         {
-            GetWorld()->SpawnActor<AActor>(CellBlueprint, SpawnLocation, SpawnRotation);
+            // Spawnamo la nostra classe ATile invece di un Actor generico
+            ATile* NewTile = GetWorld()->SpawnActor<ATile>(TileClass, SpawnLocation, FRotator::ZeroRotator);
+
+            if (NewTile)
+            {
+                // Diamo alla cella la sua identità
+                NewTile->SetGridPosition(Cell.X, Cell.Y);
+                NewTile->Elevation = Cell.Elevation;
+                NewTile->bIsWalkable = Cell.bIsWalkable;
+
+                // Se è acqua, impostiamo lo status come ostacolo
+                if (!Cell.bIsWalkable) {
+                    NewTile->SetTileStatus(-1, ETileStatus::OBSTACLE);
+                }
+
+                // REGISTRIAMO NELLA MAPPA (Stile professore)
+                TileMap.Add(FVector2D(Cell.X, Cell.Y), NewTile);
+            }
         }
     }
+
+
 }
 //logica per evitare blocchi non raggiungibili
-bool AMapGenerator::IsMapFullyConnected()
+bool AGameField::IsMapFullyConnected()
 {
     int32 TotalWalkableCells = 0;
     int32 StartX = -1;
@@ -164,4 +189,57 @@ bool AMapGenerator::IsMapFullyConnected()
     // 4. Il Verdetto finale
     // Se le celle bagnate dal secchiello sono uguali al totale della terra, la mappa è perfetta!
     return ReachedCells == TotalWalkableCells;
+}
+
+void AGameField::SpawnInitialEntities()
+{
+    // PROTEZIONE 1: Se non ci sono celle, esci subito
+    if (TileMap.Num() == 0)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Spawn fallito: TileMap vuota!"));
+        return;
+    }
+
+    TArray<ATile*> WalkableTiles;
+    for (auto& Elem : TileMap)
+    {
+        // PROTEZIONE 2: Verifica che il puntatore alla cella sia valido
+        if (Elem.Value && Elem.Value->bIsWalkable)
+        {
+            WalkableTiles.Add(Elem.Value);
+        }
+    }
+
+    if (WalkableTiles.Num() == 0) return;
+
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+    auto SpawnAtRandom = [&](TSubclassOf<AActor> ClassToSpawn, ETileStatus NewStatus) {
+        // PROTEZIONE 3: Se non hai assegnato il Blueprint nello slot, esci senza crashare
+        if (!ClassToSpawn)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Uno slot unita' e' vuoto nel Blueprint!"));
+            return;
+        }
+
+        int32 RandomIndex = FMath::RandRange(0, WalkableTiles.Num() - 1);
+        ATile* TargetTile = WalkableTiles[RandomIndex];
+
+        if (TargetTile)
+        {
+            FVector Location = TargetTile->GetActorLocation() + FVector(0, 0, 100);
+            GetWorld()->SpawnActor<AActor>(ClassToSpawn, Location, FRotator::ZeroRotator, SpawnParams);
+            TargetTile->SetTileStatus(-1, NewStatus);
+            WalkableTiles.RemoveAt(RandomIndex);
+        }
+        };
+
+    SpawnAtRandom(BrawlerClass, ETileStatus::OCCUPIED);
+    SpawnAtRandom(SniperClass, ETileStatus::OCCUPIED);
+
+    for (int32 i = 0; i < 3; i++)
+    {
+        SpawnAtRandom(TowerClass, ETileStatus::OBSTACLE);
+    }
 }

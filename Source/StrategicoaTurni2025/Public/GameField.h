@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "MapGenerator.generated.h"
+#include "GameField.generated.h"
 
 // Struttura che definisce i dati della singola cella della griglia
 USTRUCT(BlueprintType)
@@ -27,13 +27,27 @@ struct FGridCell
 };
 
 UCLASS()
-class STRATEGICOATURNI2025_API AMapGenerator : public AActor
+class STRATEGICOATURNI2025_API AGameField : public AActor
 {
     GENERATED_BODY()
 
 public:
     // Costruttore di default
-    AMapGenerator();
+    AGameField();
+
+    // Blueprint delle unità da assegnare nell'editor
+    UPROPERTY(EditAnywhere, Category = "Game Logic|Units")
+    TSubclassOf<AActor> BrawlerClass;
+
+    UPROPERTY(EditAnywhere, Category = "Game Logic|Units")
+    TSubclassOf<AActor> SniperClass;
+
+    UPROPERTY(EditAnywhere, Category = "Game Logic|Units")
+    TSubclassOf<AActor> TowerClass;
+
+    // Funzione per spawnare le unità iniziali
+    UFUNCTION(BlueprintCallable, Category = "Game Logic")
+    void SpawnInitialEntities();
 
 protected:
     virtual void BeginPlay() override;
@@ -77,6 +91,22 @@ public:
     
 
     void GenerateGridData();
+
+    // La TMap fondamentale per il Best Path (A*)
+    // FVector2D sarà (X, Y), ATile* sarà il puntatore al cubetto spawnato
+    UPROPERTY(Transient)
+    TMap<FVector2D, class ATile*> TileMap;
+
+    // Cambiamo AActor in ATile per sicurezza di tipo
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Settings")
+    TSubclassOf<class ATile> TileClass;
+
+    // Variabili per il Pathfinding (A*)
+    UPROPERTY(BlueprintReadWrite, Category = "Pathfinding")
+    class ATile* SelectedUnitTile;
+
+    UPROPERTY(BlueprintReadWrite, Category = "Pathfinding")
+    class ATile* TargetTile;
 
     private:
         // La funzione "Secchiello" che controlla se le celle sono tutte collegate
