@@ -1,14 +1,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "InputActionValue.h"
 #include "GameFramework/PlayerController.h"
 
-//al posto di #include "Tile.h"
 class ATile;
-//#include "Tile.h" // Importante per far riconoscere la classe ATile
+class AStrategyUnit; // Diciamo al compilatore che esiste questa classe
+
 #include "StrategyPlayerController.generated.h"
-
-
 
 UCLASS()
 class STRATEGICOATURNI2025_API AStrategyPlayerController : public APlayerController
@@ -16,18 +15,35 @@ class STRATEGICOATURNI2025_API AStrategyPlayerController : public APlayerControl
 	GENERATED_BODY()
 
 public:
-	// La funzione principale chiamata dal click sulla cella
 	UFUNCTION(BlueprintCallable, Category = "Grid Logic")
 	void HandleTileClick(ATile* ClickedTile);
 
-	// Memoria per l'ottimizzazione O(1) dell'illuminazione
 	UPROPERTY(BlueprintReadWrite, Category = "Grid Logic")
 	ATile* CurrentSelectedTile;
 
-	// Memoria per l'unità selezionata (se ne hai cliccata una)
+	// CAMBIATO: Ora è specifico per le nostre unità!
 	UPROPERTY(BlueprintReadWrite, Category = "Grid Logic")
-	AActor* SelectedUnit;
+	AStrategyUnit* SelectedUnit;
+
+	// Riferimento al GameField (ci servirà a breve per far calcolare i percorsi matematici)
+	UPROPERTY(BlueprintReadWrite, Category = "Grid Logic")
+	class AGameField* GameFieldRef;
+
+	// La funzione esposta al Blueprint che fa partire il raggio
+	UFUNCTION(BlueprintCallable, Category = "Grid Logic")
+	void ExecuteClick();
+
+public:
+	// Il nostro Contesto di Mapping (L'interruttore generale)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	class UInputMappingContext* DefaultMappingContext;
+
+	// La nostra Azione di Click
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	class UInputAction* ClickAction;
 
 protected:
 	virtual void BeginPlay() override;
+	// Funzione nativa di Unreal per legare i tasti alle funzioni
+	virtual void SetupInputComponent() override;
 };

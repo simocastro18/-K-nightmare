@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "StrategyUnit.h"
 #include "Tile.generated.h"
 
 // Enum per lo stato della cella (vuota, occupata da unità o ostacolo/acqua)

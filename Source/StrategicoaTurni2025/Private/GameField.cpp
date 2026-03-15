@@ -1,5 +1,6 @@
 #include "GameField.h"
 #include "Tile.h"  
+#include "StrategyUnit.h"
 #include "Math/UnrealMathUtility.h"
 
 AGameField::AGameField()
@@ -255,6 +256,11 @@ void AGameField::SpawnInitialEntities()
 		{
 			T->SetTileStatus(-1, ETileStatus::OCCUPIED);
 			T->SetUnitOnTile(NewUnit); // FONDAMENTALE: leghiamo l'unità alla cella
+			AStrategyUnit* StrategyUnit = Cast<AStrategyUnit>(NewUnit);
+			if (StrategyUnit)
+			{
+				StrategyUnit->InitializeUnit(0, T); // 0 = Umano (o metti la logica per l'AI), T = Cella
+			}
 			Zone.RemoveAt(Rnd);
 		}
 		};
@@ -264,4 +270,126 @@ void AGameField::SpawnInitialEntities()
 
 	SpawnUnitInZone(BrawlerClass, AIZone);
 	SpawnUnitInZone(SniperClass, AIZone);
+}
+
+void AGameField::ClearHighlightedTiles()
+{
+	// Cicla su tutte le celle che avevamo acceso e le spegne
+	for (ATile* Tile : HighlightedTiles)
+	{
+		if (IsValid(Tile))
+		{
+			Tile->OnSelectionChanged(false); // Spegne la singola cella
+		}
+	}
+	// Svuota la memoria
+	HighlightedTiles.Empty();
+}
+
+void AGameField::HighlightReachableTiles(AStrategyUnit* SelectedUnit)
+{
+	ClearHighlightedTiles();
+
+	// 1. CONTROLLI DI SICUREZZA CON LOG
+	if (!IsValid(SelectedUnit))
+	{
+		UE_LOG(LogTemp, Error, TEXT("DIJKSTRA: SelectedUnit nullo o distrutto!"));
+		return;
+	}
+	if (!IsValid(SelectedUnit->CurrentTile))
+	{
+		UE_LOG(LogTemp, Error, TEXT("DIJKSTRA: L'unita' %s non sa su quale cella si trova (CurrentTile nullo)! Controlla lo SpawnInitialEntities."), *SelectedUnit->UnitLogID);
+		return;
+	}
+
+	ATile* StartTile = SelectedUnit->CurrentTile;
+	int32 MaxRange = SelectedUnit->MovementRange;
+
+	// LOG DI PARTENZA
+	UE_LOG(LogTemp, Warning, TEXT("=== INIZIO DIJKSTRA ==="));
+	UE_LOG(LogTemp, Warning, TEXT("Unita: %s | Partenza: X:%d Y:%d | Punti Movimento: %d"),
+		*SelectedUnit->UnitLogID, StartTile->GetGridPosition().X, StartTile->GetGridPosition().Y, MaxRange);
+
+	if (MaxRange <= 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("DIJKSTRA BLOCCATO: Il Movimento dell'unita e' %d. Modifica i Class Defaults nel Blueprint!"), MaxRange);
+		return;
+	}
+
+	TMap<ATile*, int32> CostSoFar;
+	TArray<ATile*> Frontier;
+
+	CostSoFar.Add(StartTile, 0);
+	Frontier.Add(StartTile);
+
+	FIntPoint Directions[4] = {
+		FIntPoint(0, 1), FIntPoint(0, -1),
+		FIntPoint(1, 0), FIntPoint(-1, 0)
+	};
+
+	int32 CelleValideTrovate = 0; // Contatore per il debug
+
+	while (Frontier.Num() > 0)
+	{
+		int32 BestIndex = 0;
+		for (int32 i = 1; i < Frontier.Num(); ++i)
+		{
+			if (CostSoFar[Frontier[i]] < CostSoFar[Frontier[BestIndex]])
+			{
+				BestIndex = i;
+			}
+		}
+
+		ATile* Current = Frontier[BestIndex];
+		Frontier.RemoveAt(BestIndex);
+
+		if (!IsValid(Current)) continue;
+
+		int32 CurrentCost = CostSoFar[Current];
+
+		for (FIntPoint Dir : Directions)
+		{
+			FIntPoint NeighborCoord = Current->GetGridPosition() + Dir;
+
+			if (ATile** FoundTilePtr = TileMap.Find(NeighborCoord))
+			{
+				ATile* Neighbor = *FoundTilePtr;
+
+				if (IsValid(Neighbor) && Neighbor->bIsWalkable && Neighbor->Status != ETileStatus::OBSTACLE && !IsValid(Neighbor->UnitOnTile))
+				{
+					int32 StepCost = (Neighbor->Elevation > Current->Elevation) ? 2 : 1;
+					int32 NewCost = CurrentCost + StepCost;
+
+					if (NewCost <= MaxRange)
+					{
+						if (!CostSoFar.Contains(Neighbor) || NewCost < CostSoFar[Neighbor])
+						{
+							CostSoFar.Add(Neighbor, NewCost);
+							Frontier.Add(Neighbor);
+							CelleValideTrovate++;
+
+							// LOG DI OGNI PASSO
+							UE_LOG(LogTemp, Display, TEXT(" -> Espansione su X:%d Y:%d | Costo Totale: %d"), NeighborCoord.X, NeighborCoord.Y, NewCost);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("=== FINE DIJKSTRA: Trovate %d celle raggiungibili ==="), CelleValideTrovate);
+
+	// PULIZIA DI SICUREZZA
+	ClearHighlightedTiles();
+
+	// ACCENDIAMO LE CELLE
+	for (auto& Elem : CostSoFar)
+	{
+		ATile* ReachableTile = Elem.Key;
+		if (IsValid(ReachableTile) && ReachableTile != StartTile)
+		{
+			ReachableTile->OnSelectionChanged(true);
+			HighlightedTiles.Add(ReachableTile);
+		}
+	}
 }

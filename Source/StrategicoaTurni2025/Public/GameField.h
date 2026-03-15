@@ -105,6 +105,20 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = "Pathfinding")
 	class ATile* TargetTile;
 
+	// --- SISTEMA DI MOVIMENTO (DIJKSTRA) ---
+
+	// Array per memorizzare le celle attualmente illuminate
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pathfinding")
+	TArray<class ATile*> HighlightedTiles;
+
+	// Funzione che calcola l'area di movimento e la illumina
+	UFUNCTION(BlueprintCallable, Category = "Pathfinding")
+	void HighlightReachableTiles(class AStrategyUnit* SelectedUnit);
+
+	// Funzione per spegnere tutte le celle
+	UFUNCTION(BlueprintCallable, Category = "Pathfinding")
+	void ClearHighlightedTiles();
+
 private:
 	// La funzione "Secchiello" che controlla se le celle sono tutte collegate
 	bool IsMapFullyConnected();
