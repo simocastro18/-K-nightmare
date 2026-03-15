@@ -1,4 +1,3 @@
-#include "GameField.h"
 #include "Tile.h" // FONDAMENTALE: permette al GameField di vedere le funzioni di ATile
 #include "Math/UnrealMathUtility.h"
 #include "Engine/World.h" // Per GetWorld() e SpawnActor
@@ -21,7 +20,8 @@ ATile::ATile()
 	PlayerOwner = -1;
 	Elevation = 0;
 	bIsWalkable = false;
-	TileGridPosition = FVector2D(0, 0);
+	TileGridPosition = FIntPoint(0, 0); // AGGIORNATO
+	UnitOnTile = nullptr; // AGGIUNTO PER SICUREZZA
 }
 
 void ATile::BeginPlay()
@@ -35,12 +35,18 @@ void ATile::SetTileStatus(int32 NewOwner, ETileStatus NewStatus)
 	Status = NewStatus;
 }
 
-void ATile::SetGridPosition(double InX, double InY)
+void ATile::SetGridPosition(int32 InX, int32 InY) // AGGIORNATO
 {
-	TileGridPosition.Set(InX, InY);
+	TileGridPosition.X = InX;
+	TileGridPosition.Y = InY;
 }
 
-FVector2D ATile::GetGridPosition() const
+FIntPoint ATile::GetGridPosition() const // AGGIORNATO
 {
 	return TileGridPosition;
+}
+
+void ATile::SetUnitOnTile(AActor* NewUnit)
+{
+	UnitOnTile = NewUnit;
 }
