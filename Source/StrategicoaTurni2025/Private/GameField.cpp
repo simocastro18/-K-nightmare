@@ -1,6 +1,7 @@
 #include "GameField.h"
 #include "Tile.h"  
 #include "StrategyUnit.h"
+#include "StrategyTower.h"
 #include "Math/UnrealMathUtility.h"
 
 AGameField::AGameField()
@@ -16,10 +17,8 @@ void AGameField::BeginPlay()
 void AGameField::GenerateGridData()
 {
 	bool bIsMapValid = false;
-	// PARACADUTE: Se le variabili sono a 0, diamo valori base di emergenza
 	int32 SafeMaxHeight = (MaxHeight <= 0) ? 3 : MaxHeight;
 	float SafeNoise = (NoiseScale <= 0.0f) ? 0.1f : NoiseScale;
-
 	int32 Attempts = 0;
 
 	while (!bIsMapValid && Attempts < 50) {
@@ -29,9 +28,7 @@ void AGameField::GenerateGridData()
 
 		if (bUseRandomSeed || Attempts > 1) {
 			RandomSeed = FMath::RandRange(1, 999999);
-			// Calcoliamo l'offset FUORI dal loop tenendolo piccolo per non far impazzire il Perlin
 			OffsetX = (RandomSeed % 1000) * 10.0f;
-			// Moltiplichiamo per 2 la Y così le coordinate non sono simmetriche
 			OffsetY = ((RandomSeed * 2) % 1000) * 10.0f;
 		}
 
@@ -45,31 +42,18 @@ void AGameField::GenerateGridData()
 				NewCell.X = X;
 				NewCell.Y = Y;
 
-				// IL SEGRETO: Moltiplichiamo PRIMA per il noise, e POI aggiungiamo l'offset
 				float SampleX = (X * SafeNoise) + OffsetX;
 				float SampleY = (Y * SafeNoise) + OffsetY;
-
 				float NoiseValue = FMath::PerlinNoise2D(FVector2D(SampleX, SampleY));
 
-				// Portiamo il valore da (-1 a 1) a (0 a 1)
 				float NormalizedNoise = (NoiseValue + 1.0f) / 2.0f;
-
-				// Rendiamo i dislivelli più belli da vedere
 				NormalizedNoise = FMath::Pow(NormalizedNoise, 1.8f);
-
-				// 4. Stretch verso l'alto ? più celle raggiungono livelli 3-4 (arancione/rosso)
 				NormalizedNoise = NormalizedNoise * 1.55f;
-
 				NormalizedNoise = NormalizedNoise - 0.10f;
-
-				// 5. Clamp obbligatorio
 				NormalizedNoise = FMath::Clamp(NormalizedNoise, 0.0f, 1.0f);
 
-				// Moltiplichiamo per l'altezza massima (SafeMaxHeight)
 				NewCell.Elevation = FMath::RoundToInt(NormalizedNoise * SafeMaxHeight);
 				NewCell.Elevation = FMath::Clamp(NewCell.Elevation, 0, SafeMaxHeight);
-
-				// Se Elevation > 0 è terraferma (Walkable), altrimenti è Acqua
 				NewCell.bIsWalkable = (NewCell.Elevation > 0);
 
 				GridData.Add(NewCell);
@@ -98,9 +82,7 @@ void AGameField::GenerateGridData()
 					NewTile->SetTileStatus(-1, ETileStatus::OBSTACLE);
 				}
 
-				// REGISTRIAMO NELLA MAPPA (Usando FIntPoint)
 				TileMap.Add(FIntPoint(Cell.X, Cell.Y), NewTile);
-				// AVVISIAMO IL BLUEPRINT CHE I DATI SONO PRONTI!
 				NewTile->OnTileDataInitialized();
 			}
 		}
@@ -177,10 +159,7 @@ void AGameField::SpawnInitialEntities()
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	// ==========================================
-	// FASE 1: PIAZZAMENTO TORRI (Orizzontali)
-	// ==========================================
-
+	// FASE 1: PIAZZAMENTO TORRI
 	auto SpawnTowerAtBestLocation = [&](FIntPoint TargetCoord) {
 		ATile* BestTile = nullptr;
 		float MinDistance = 999999.0f;
@@ -190,7 +169,6 @@ void AGameField::SpawnInitialEntities()
 			ATile* T = Elem.Value;
 			if (T && T->IsValidLowLevel() && T->bIsWalkable && T->Status == ETileStatus::EMPTY)
 			{
-				// Qui convertiamo temporaneamente in float per usare la distanza 2D
 				float Dist = FVector2D::Distance(
 					FVector2D(T->TileGridPosition.X, T->TileGridPosition.Y),
 					FVector2D(TargetCoord.X, TargetCoord.Y)
@@ -210,8 +188,14 @@ void AGameField::SpawnInitialEntities()
 			AActor* NewTower = GetWorld()->SpawnActor<AActor>(TowerClass, Loc, FRotator::ZeroRotator, SpawnParams);
 			if (NewTower)
 			{
-				BestTile->SetTileStatus(-1, ETileStatus::OBSTACLE);
-				// Non setto UnitOnTile perché le torri sono ostacoli statici, non unità mobili
+				BestTile->SetTileStatus(-1, ETileStatus::OBSTACLE); // Ostacolo [cite: 108]
+
+				// AGGIUNTA: Diciamo alla torre dove si trova esattamente!
+				AStrategyTower* StratTower = Cast<AStrategyTower>(NewTower);
+				if (StratTower)
+				{
+					StratTower->GridPosition = BestTile->GetGridPosition();
+				}
 			}
 		}
 		};
@@ -220,11 +204,7 @@ void AGameField::SpawnInitialEntities()
 	SpawnTowerAtBestLocation(FIntPoint(12, 5));
 	SpawnTowerAtBestLocation(FIntPoint(12, 19));
 
-
-	// ==========================================
-	// FASE 2: PIAZZAMENTO UNITA' (Alto / Basso)
-	// ==========================================
-
+	// FASE 2: PIAZZAMENTO UNITA' 
 	TArray<ATile*> PlayerZone;
 	TArray<ATile*> AIZone;
 
@@ -237,14 +217,15 @@ void AGameField::SpawnInitialEntities()
 			{
 				PlayerZone.Add(T);
 			}
-			else if (T->TileGridPosition.X >= 22)
+			else if (T->TileGridPosition.X >= GridSizeX - 3)
 			{
 				AIZone.Add(T);
 			}
 		}
 	}
 
-	auto SpawnUnitInZone = [&](TSubclassOf<AActor> LClass, TArray<ATile*>& Zone) {
+	// Funzione Lambda aggiornata per assegnare Team e OwnerID
+	auto SpawnUnitInZone = [&](TSubclassOf<AActor> LClass, TArray<ATile*>& Zone, ETeam AssignedTeam, int32 OwnerID) {
 		if (!LClass || Zone.Num() == 0) return;
 
 		int32 Rnd = FMath::RandRange(0, Zone.Num() - 1);
@@ -255,34 +236,37 @@ void AGameField::SpawnInitialEntities()
 		if (NewUnit)
 		{
 			T->SetTileStatus(-1, ETileStatus::OCCUPIED);
-			T->SetUnitOnTile(NewUnit); // FONDAMENTALE: leghiamo l'unità alla cella
+			T->SetUnitOnTile(NewUnit);
+
 			AStrategyUnit* StrategyUnit = Cast<AStrategyUnit>(NewUnit);
 			if (StrategyUnit)
 			{
-				StrategyUnit->InitializeUnit(0, T); // 0 = Umano (o metti la logica per l'AI), T = Cella
+				StrategyUnit->InitializeUnit(OwnerID, T);
+				StrategyUnit->UnitTeam = AssignedTeam;
+				StrategyUnit->GameFieldRef = this;
 			}
 			Zone.RemoveAt(Rnd);
 		}
 		};
 
-	SpawnUnitInZone(BrawlerClass, PlayerZone);
-	SpawnUnitInZone(SniperClass, PlayerZone);
+	// SCHIERAMENTO PLAYER
+	SpawnUnitInZone(BrawlerClass, PlayerZone, ETeam::Player, 0);
+	SpawnUnitInZone(SniperClass, PlayerZone, ETeam::Player, 0);
 
-	SpawnUnitInZone(BrawlerClass, AIZone);
-	SpawnUnitInZone(SniperClass, AIZone);
+	// SCHIERAMENTO AI
+	SpawnUnitInZone(BrawlerClass, AIZone, ETeam::AI, 1);
+	SpawnUnitInZone(SniperClass, AIZone, ETeam::AI, 1);
 }
 
 void AGameField::ClearHighlightedTiles()
 {
-	// Cicla su tutte le celle che avevamo acceso e le spegne
 	for (ATile* Tile : HighlightedTiles)
 	{
 		if (IsValid(Tile))
 		{
-			Tile->OnSelectionChanged(false); // Spegne la singola cella
+			Tile->OnSelectionChanged(false);
 		}
 	}
-	// Svuota la memoria
 	HighlightedTiles.Empty();
 }
 
@@ -290,31 +274,13 @@ void AGameField::HighlightReachableTiles(AStrategyUnit* SelectedUnit)
 {
 	ClearHighlightedTiles();
 
-	// 1. CONTROLLI DI SICUREZZA CON LOG
-	if (!IsValid(SelectedUnit))
-	{
-		UE_LOG(LogTemp, Error, TEXT("DIJKSTRA: SelectedUnit nullo o distrutto!"));
-		return;
-	}
-	if (!IsValid(SelectedUnit->CurrentTile))
-	{
-		UE_LOG(LogTemp, Error, TEXT("DIJKSTRA: L'unita' %s non sa su quale cella si trova (CurrentTile nullo)! Controlla lo SpawnInitialEntities."), *SelectedUnit->UnitLogID);
-		return;
-	}
+	if (!IsValid(SelectedUnit)) return;
+	if (!IsValid(SelectedUnit->CurrentTile)) return;
 
 	ATile* StartTile = SelectedUnit->CurrentTile;
 	int32 MaxRange = SelectedUnit->MovementRange;
 
-	// LOG DI PARTENZA
-	UE_LOG(LogTemp, Warning, TEXT("=== INIZIO DIJKSTRA ==="));
-	UE_LOG(LogTemp, Warning, TEXT("Unita: %s | Partenza: X:%d Y:%d | Punti Movimento: %d"),
-		*SelectedUnit->UnitLogID, StartTile->GetGridPosition().X, StartTile->GetGridPosition().Y, MaxRange);
-
-	if (MaxRange <= 0)
-	{
-		UE_LOG(LogTemp, Error, TEXT("DIJKSTRA BLOCCATO: Il Movimento dell'unita e' %d. Modifica i Class Defaults nel Blueprint!"), MaxRange);
-		return;
-	}
+	if (MaxRange <= 0) return;
 
 	TMap<ATile*, int32> CostSoFar;
 	TArray<ATile*> Frontier;
@@ -327,7 +293,8 @@ void AGameField::HighlightReachableTiles(AStrategyUnit* SelectedUnit)
 		FIntPoint(1, 0), FIntPoint(-1, 0)
 	};
 
-	int32 CelleValideTrovate = 0; // Contatore per il debug
+	CameFromMap.Empty();
+	CameFromMap.Add(StartTile, nullptr);
 
 	while (Frontier.Num() > 0)
 	{
@@ -365,11 +332,8 @@ void AGameField::HighlightReachableTiles(AStrategyUnit* SelectedUnit)
 						if (!CostSoFar.Contains(Neighbor) || NewCost < CostSoFar[Neighbor])
 						{
 							CostSoFar.Add(Neighbor, NewCost);
+							CameFromMap.Add(Neighbor, Current);
 							Frontier.Add(Neighbor);
-							CelleValideTrovate++;
-
-							// LOG DI OGNI PASSO
-							UE_LOG(LogTemp, Display, TEXT(" -> Espansione su X:%d Y:%d | Costo Totale: %d"), NeighborCoord.X, NeighborCoord.Y, NewCost);
 						}
 					}
 				}
@@ -377,12 +341,8 @@ void AGameField::HighlightReachableTiles(AStrategyUnit* SelectedUnit)
 		}
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("=== FINE DIJKSTRA: Trovate %d celle raggiungibili ==="), CelleValideTrovate);
-
-	// PULIZIA DI SICUREZZA
 	ClearHighlightedTiles();
 
-	// ACCENDIAMO LE CELLE
 	for (auto& Elem : CostSoFar)
 	{
 		ATile* ReachableTile = Elem.Key;
@@ -390,6 +350,104 @@ void AGameField::HighlightReachableTiles(AStrategyUnit* SelectedUnit)
 		{
 			ReachableTile->OnSelectionChanged(true);
 			HighlightedTiles.Add(ReachableTile);
+		}
+	}
+}
+
+TArray<FVector> AGameField::GetPathToTile(ATile* DestinationTile)
+{
+	TArray<FVector> Path;
+
+	if (!IsValid(DestinationTile) || !CameFromMap.Contains(DestinationTile))
+	{
+		return Path;
+	}
+
+	ATile* CurrentTile = DestinationTile;
+	int32 SafetyCounter = 0;
+
+	while (IsValid(CurrentTile) && SafetyCounter < 1000)
+	{
+		Path.Add(CurrentTile->GetActorLocation());
+
+		ATile** ParentPtr = CameFromMap.Find(CurrentTile);
+
+		if (ParentPtr && *ParentPtr != nullptr)
+		{
+			CurrentTile = *ParentPtr;
+		}
+		else
+		{
+			break;
+		}
+
+		SafetyCounter++;
+	}
+
+	int32 NumElements = Path.Num();
+	for (int32 i = 0; i < NumElements / 2; ++i)
+	{
+		Path.Swap(i, NumElements - 1 - i);
+	}
+
+	if (Path.Num() > 0)
+	{
+		Path.RemoveAt(0);
+	}
+
+	return Path;
+}
+
+void AGameField::ClearAttackableTiles()
+{
+	for (ATile* Tile : AttackableTiles)
+	{
+		if (IsValid(Tile))
+		{
+			Tile->UpdateAttackHighlight(false);
+		}
+	}
+	AttackableTiles.Empty();
+}
+
+void AGameField::HighlightAttackableTiles(AStrategyUnit* AttackingUnit)
+{
+	ClearAttackableTiles();
+
+	if (!IsValid(AttackingUnit) || !IsValid(AttackingUnit->CurrentTile)) return;
+
+	FIntPoint StartPos = AttackingUnit->CurrentTile->GetGridPosition();
+	int32 Range = AttackingUnit->AttackRange;
+
+	for (int32 dx = -Range; dx <= Range; ++dx)
+	{
+		for (int32 dy = -Range; dy <= Range; ++dy)
+		{
+			if (FMath::Abs(dx) + FMath::Abs(dy) <= Range)
+			{
+				FIntPoint CheckPos(StartPos.X + dx, StartPos.Y + dy);
+
+				if (ATile** FoundTilePtr = TileMap.Find(CheckPos))
+				{
+					ATile* CheckTile = *FoundTilePtr;
+
+					if (IsValid(CheckTile) && CheckTile != AttackingUnit->CurrentTile)
+					{
+						// CONTROLLO BERSAGLIO E FUOCO AMICO DEFINITIVO
+						if (IsValid(CheckTile->UnitOnTile))
+						{
+							AStrategyUnit* TargetUnit = Cast<AStrategyUnit>(CheckTile->UnitOnTile);
+
+							// Illumina SOLO se l'unità esiste e NON è del mio stesso Team
+							if (IsValid(TargetUnit) && TargetUnit->UnitTeam != AttackingUnit->UnitTeam)
+							{
+								CheckTile->UpdateAttackHighlight(true);
+								AttackableTiles.Add(CheckTile);
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 }

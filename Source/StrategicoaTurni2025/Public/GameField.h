@@ -111,6 +111,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pathfinding")
 	TArray<class ATile*> HighlightedTiles;
 
+	// Mappa per ricostruire il percorso (Da dove sono arrivato per raggiungere questa cella?)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pathfinding")
+	TMap<class ATile*, class ATile*> CameFromMap;
+
+	// Funzione che calcola e restituisce la lista di coordinate 3D
+	UFUNCTION(BlueprintCallable, Category = "Pathfinding")
+	TArray<FVector> GetPathToTile(class ATile* DestinationTile);
+
 	// Funzione che calcola l'area di movimento e la illumina
 	UFUNCTION(BlueprintCallable, Category = "Pathfinding")
 	void HighlightReachableTiles(class AStrategyUnit* SelectedUnit);
@@ -118,6 +126,20 @@ public:
 	// Funzione per spegnere tutte le celle
 	UFUNCTION(BlueprintCallable, Category = "Pathfinding")
 	void ClearHighlightedTiles();
+
+	// --- SISTEMA DI ATTACCO ---
+
+	// Array per memorizzare le celle rosse attualmente illuminate
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	TArray<class ATile*> AttackableTiles;
+
+	// Calcola e illumina di rosso i nemici nel raggio d'azione
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	void HighlightAttackableTiles(class AStrategyUnit* AttackingUnit);
+
+	// Spegne le celle rosse
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	void ClearAttackableTiles();
 
 private:
 	// La funzione "Secchiello" che controlla se le celle sono tutte collegate

@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
-#include "GameField.h" // Per poter usare AGameField
+#include "GameField.h" 
 #include "StrategyUnit.h"
 #include "StrategyGameMode.generated.h"
 
@@ -19,24 +19,29 @@ class STRATEGICOATURNI2025_API AStrategyGameMode : public AGameModeBase
 	GENERATED_BODY()
 
 public:
-	// La funzione esposta al Widget Blueprint
 	UFUNCTION(BlueprintCallable, Category = "Game Flow")
 	void StartGameWithConfig(float NoiseScale, int32 GridSizeX, int32 GridSizeY);
 
-	// Il riferimento al nostro GameField nel livello
 	UPROPERTY(BlueprintReadOnly, Category = "Game Flow")
 	AGameField* MapGenerator;
 
 	UFUNCTION(BlueprintCallable, Category = "Game Flow")
 	void EndTurn();
 
-	// Getter per il PlayerController
 	ETurnState GetCurrentTurnState() const { return CurrentTurnState; }
-	void CheckRemainingMoves(); 
+
+	void CheckRemainingMoves();
+
+	// Valuta la macchina a stati delle torri
+	void EvaluateTowers();
+
+	// NUOVO: La funzione che gestisce i nemici uno alla volta
+	UFUNCTION(BlueprintCallable, Category = "AI")
+	void ProcessAITurn();
 
 protected:
 	virtual void BeginPlay() override;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
 	ETurnState CurrentTurnState = ETurnState::PlayerTurn;
-
 };

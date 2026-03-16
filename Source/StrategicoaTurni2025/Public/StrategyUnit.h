@@ -4,7 +4,10 @@
 #include "GameFramework/Actor.h"
 #include "StrategyUnit.generated.h"
 
-// Enum per il tipo di attacco, come richiesto dal PDF
+// Diciamo al compilatore in anticipo che esiste una classe ATile
+class ATile;
+
+// Enum per il tipo di attacco, come richiesto dal PDF (Spazi invisibili rimossi)
 UENUM(BlueprintType)
 enum class EAttackType : uint8
 {
@@ -34,9 +37,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* UnitMesh;
 
-	// --- STATISTICHE BASE (Esposte per i Blueprint figli) ---
-
-	// Identificativo per il Log ('S' per Sniper, 'B' per Brawler)
+	// --- STATISTICHE BASE ---
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit Stats")
 	FString UnitLogID;
 
@@ -64,36 +65,69 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit Stats")
 	int32 MaxHealth;
 
-	// --- VARIABILI DI STATO (Modificate a Runtime) ---
-
+	// --- VARIABILI DI STATO ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit State")
 	int32 CurrentHealth;
 
-	// ID del giocatore (es. 0 per Umano, 1 per AI)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit State")
 	int32 PlayerOwner;
 
-	// Cella su cui si trova attualmente l'unità
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit State")
-	class ATile* CurrentTile;
+	ATile* CurrentTile;
 
-	// Booleana per sapere se l'unità ha già agito in questo turno
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit State")
 	bool bHasActedThisTurn;
 
 	// --- FUNZIONI DI COMBATTIMENTO E GESTIONE ---
-
-	// Inizializza i PS e le statistiche all'inizio o al respawn
 	UFUNCTION(BlueprintCallable, Category = "Unit Actions")
 	void InitializeUnit(int32 InOwnerID, ATile* StartingTile);
 
-	// Funzione per subire danni
 	UFUNCTION(BlueprintCallable, Category = "Unit Actions")
 	void ReceiveDamage(int32 DamageAmount);
 
-	// Genera un danno randomico tra Min e Max
 	UFUNCTION(BlueprintCallable, Category = "Unit Actions")
 	int32 CalculateDamageToDeal();
+
+	// --- NUOVO: INTELLIGENZA ARTIFICIALE ---
+	UFUNCTION(BlueprintCallable, Category = "AI")
+	void ExecuteAITurn();
+
+	// --- VARIABILI LOGICA TURNI ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turn Logic")
+	bool bHasMoved = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turn Logic")
+	bool bHasAttacked = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turn Logic")
+	bool bIsTurnFinished = false;
+
+	// --- VARIABILI PER IL MOVIMENTO ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
+	bool bIsMoving = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats")
+	int32 HealthPoints = 10;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
+	float MoveSpeed = 600.0f;
+
+	TArray<FVector> PathToFollow;
+	int32 CurrentPathIndex = 0;
+
+	void StartMoving(TArray<FVector> NewPath);
+	virtual void Tick(float DeltaTime) override;
+
+	// Reference diretta al campo di gioco
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "References")
+	class AGameField* GameFieldRef;
+
+	// --- VARIABILI IA ---
+	ATile* AIBestTargetTile = nullptr;
+	FTimerHandle AIThinkTimerHandle;
+
+	UFUNCTION()
+	void ExecuteAIMovement(); // La funzione che partirà DOPO il delay
 
 protected:
 	virtual void BeginPlay() override;

@@ -1,14 +1,15 @@
 #include "StrategyGameMode.h"
-#include "StrategyPlayerController.h"
+#include "Kismet/GameplayStatics.h"
+#include "StrategyTower.h"
 #include "StrategyUnit.h"
-#include "GameField.h"
-#include "Kismet/GameplayStatics.h" // Per trovare il GameField nel mondo
+#include "Tile.h"
 
 void AStrategyGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+	//CurrentTurnState = ETurnState::PlayerTurn;
+	//UE_LOG(LogTemp, Warning, TEXT("=== INIZIO PARTITA: TURNO DEL GIOCATORE ==="));
 
-	// Troviamo automaticamente l'oggetto BP_GameField che hai trascinato nella mappa
 	AActor* FoundField = UGameplayStatics::GetActorOfClass(GetWorld(), AGameField::StaticClass());
 	if (FoundField)
 	{
@@ -16,97 +17,176 @@ void AStrategyGameMode::BeginPlay()
 	}
 }
 
-void AStrategyGameMode::StartGameWithConfig(float NoiseScale, int32 GridSizeX, int32 GridSizeY)
+void AStrategyGameMode::StartGameWithConfig(float InNoiseScale, int32 InGridSizeX, int32 InGridSizeY)
 {
 	if (MapGenerator)
-	{	
-		// Protezione contro i valori a zero o assurdi
-		int32 SafeX = (GridSizeX <= 0) ? 25 : GridSizeX;
-		int32 SafeY = (GridSizeY <= 0) ? 25 : GridSizeY;
-		float SafeNoise = (NoiseScale <= 0.0f) ? 0.1f : NoiseScale;
-
-		AStrategyPlayerController* PC = Cast<AStrategyPlayerController>(GetWorld()->GetFirstPlayerController());
-		if (PC)
-		{
-			// Consegniamo la mappa direttamente nelle mani del Player Controller
-			PC->GameFieldRef = MapGenerator;
-		}
-
-		// 1. Applichiamo i dati ricevuti dall'utente
-		MapGenerator->NoiseScale = NoiseScale;
-		MapGenerator->GridSizeX = GridSizeX;
-		MapGenerator->GridSizeY = GridSizeY;
-
-		// 2. Generiamo la griglia (Sincrono: il codice si ferma finché non ha finito!)
-		MapGenerator->GenerateGridData();
-
-		// 3. Spawnamo truppe e torri sicuri al 100% che la griglia esista
-		MapGenerator->SpawnInitialEntities();
-	}
-	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("ERRORE CRITICO: AGameField non trovato nel livello!"));
+		MapGenerator->NoiseScale = InNoiseScale;
+		MapGenerator->GridSizeX = InGridSizeX;
+		MapGenerator->GridSizeY = InGridSizeY;
+		MapGenerator->GenerateGridData();
+		MapGenerator->SpawnInitialEntities();
+		// LANCIO DELLA MONETA (Random 50/50) 
+		if (FMath::RandBool())
+		{
+			CurrentTurnState = ETurnState::PlayerTurn;
+			UE_LOG(LogTemp, Warning, TEXT("=== LANCIO MONETA: Vince il GIOCATORE! ==="));
+		}
+		else
+		{
+			CurrentTurnState = ETurnState::AITurn;
+			UE_LOG(LogTemp, Warning, TEXT("=== LANCIO MONETA: Vince l'IA! ==="));
+			// Avviamo l'IA se ha vinto lei
+			GetWorldTimerManager().SetTimerForNextTick(this, &AStrategyGameMode::ProcessAITurn);
+		}
 	}
 }
 
 void AStrategyGameMode::CheckRemainingMoves()
 {
-	// 1. Troviamo tutte le unità nella mappa
 	TArray<AActor*> AllUnits;
-	// Se ti dà errore qui, manca #include "Kismet/GameplayStatics.h"
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyUnit::StaticClass(), AllUnits);
 
-	bool bAnyUnitCanMove = false;
+	bool bPlayerCanAct = false;
+	bool bAICanAct = false;
 
 	for (AActor* Actor : AllUnits)
 	{
-		// Se ti dà errore su AStrategyUnit, manca #include "StrategyUnit.h"
 		AStrategyUnit* Unit = Cast<AStrategyUnit>(Actor);
-
-		// Verifichiamo se l'unità appartiene al team del turno attuale
-		ETeam CurrentActiveTeam = (CurrentTurnState == ETurnState::PlayerTurn) ? ETeam::Player : ETeam::AI;
-
-		if (Unit && Unit->UnitTeam == CurrentActiveTeam)
+		if (Unit && !Unit->bIsTurnFinished)
 		{
-			if (!Unit->bHasMovedThisTurn)
-			{
-				bAnyUnitCanMove = true;
-				break; // Ne basta una che può muovere per non finire il turno
-			}
+			if (Unit->UnitTeam == ETeam::Player) bPlayerCanAct = true;
+			else bAICanAct = true;
 		}
 	}
 
-	// 2. Se nessuno può più muovere, cambiamo turno automaticamente
-	if (!bAnyUnitCanMove && AllUnits.Num() > 0) // Controlliamo che ci sia almeno un'unità
+	if (CurrentTurnState == ETurnState::PlayerTurn && !bPlayerCanAct)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Tutte le unità hanno mosso o agito. Cambio Turno!"));
 		EndTurn();
 	}
 }
 
 void AStrategyGameMode::EndTurn()
 {
+	EvaluateTowers();
+	TArray<AActor*> AllUnits;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyUnit::StaticClass(), AllUnits);
+
+	for (AActor* Actor : AllUnits)
+	{
+		AStrategyUnit* Unit = Cast<AStrategyUnit>(Actor);
+		if (Unit)
+		{
+			Unit->bHasMovedThisTurn = false;
+			Unit->bHasAttacked = false;
+			Unit->bIsTurnFinished = false;
+			Unit->bHasMoved = false;
+		}
+	}
+
 	if (CurrentTurnState == ETurnState::PlayerTurn)
 	{
 		CurrentTurnState = ETurnState::AITurn;
 		UE_LOG(LogTemp, Warning, TEXT("=== TURNO DELL'INTELLIGENZA ARTIFICIALE ==="));
-
-		// TODO: Qui chiameremo la funzione che fa pensare l'AI
+		// Invece di saltare, chiamiamo il primo nemico!
+		GetWorldTimerManager().SetTimerForNextTick(this, &AStrategyGameMode::ProcessAITurn);
 	}
 	else
 	{
 		CurrentTurnState = ETurnState::PlayerTurn;
-		UE_LOG(LogTemp, Warning, TEXT("=== TURNO DEL GIOCATORE ==="));
+		UE_LOG(LogTemp, Warning, TEXT("=== NUOVO ROUND: TURNO DEL GIOCATORE ==="));
 	}
+}
+
+// IL MOTORE DELL'IA
+void AStrategyGameMode::ProcessAITurn()
+{
+	TArray<AActor*> AllUnits;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyUnit::StaticClass(), AllUnits);
+
+	AStrategyUnit* NextAIUnit = nullptr;
+
+	// Cerchiamo il primo nemico che non ha ancora agito
+	for (AActor* Actor : AllUnits)
+	{
+		AStrategyUnit* Unit = Cast<AStrategyUnit>(Actor);
+		if (Unit && Unit->UnitTeam == ETeam::AI && !Unit->bIsTurnFinished)
+		{
+			NextAIUnit = Unit;
+			break;
+		}
+	}
+
+	if (NextAIUnit)
+	{
+		// Trovato! Gli diciamo di giocare il suo turno
+		NextAIUnit->ExecuteAITurn();
+	}
+	else
+	{
+		// Tutti i nemici hanno finito, torna al Player
+		EndTurn();
+	}
+}
+
+void AStrategyGameMode::EvaluateTowers()
+{
+	TArray<AActor*> AllTowers;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyTower::StaticClass(), AllTowers);
 
 	TArray<AActor*> AllUnits;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyUnit::StaticClass(), AllUnits);
-	for (AActor* Actor : AllUnits)
+
+	for (AActor* TowerActor : AllTowers)
 	{
-		if (AStrategyUnit* Unit = Cast<AStrategyUnit>(Actor))
+		AStrategyTower* Tower = Cast<AStrategyTower>(TowerActor);
+		if (!Tower) continue;
+
+		bool bPlayerInZone = false;
+		bool bAIInZone = false;
+
+		// 1. Controlliamo chi c'è nella Zona di Cattura (Raggio 2) 
+		for (AActor* UnitActor : AllUnits)
 		{
-			Unit->bHasMovedThisTurn = false;
+			AStrategyUnit* Unit = Cast<AStrategyUnit>(UnitActor);
+			if (Unit && Unit->CurrentHealth > 0 && Unit->CurrentTile)
+			{
+				FIntPoint UnitPos = Unit->CurrentTile->GetGridPosition();
+
+				// Calcolo della distanza (inclusa la diagonale) 
+				int32 DistX = FMath::Abs(UnitPos.X - Tower->GridPosition.X);
+				int32 DistY = FMath::Abs(UnitPos.Y - Tower->GridPosition.Y);
+
+				if (DistX <= 2 && DistY <= 2)
+				{
+					if (Unit->UnitTeam == ETeam::Player) bPlayerInZone = true;
+					else if (Unit->UnitTeam == ETeam::AI) bAIInZone = true;
+				}
+			}
+		}
+
+		// 2. La Macchina a Stati [cite: 113, 116, 120]
+		ETowerState OldState = Tower->CurrentState;
+
+		if (bPlayerInZone && bAIInZone)
+		{
+			Tower->CurrentState = ETowerState::Contested; // Entrambi [cite: 122]
+		}
+		else if (bPlayerInZone)
+		{
+			Tower->CurrentState = ETowerState::ControlledPlayer; // Solo Player [cite: 117]
+		}
+		else if (bAIInZone)
+		{
+			Tower->CurrentState = ETowerState::ControlledAI; // Solo IA [cite: 117]
+		}
+		// Se (bPlayerInZone == false && bAIInZone == false), la torre NON CAMBIA stato (rimane a chi la possedeva) 
+
+		// 3. Se lo stato è cambiato, avvisiamo il Blueprint per cambiare colore!
+		if (OldState != Tower->CurrentState)
+		{
+			Tower->OnStateChanged(Tower->CurrentState);
+			UE_LOG(LogTemp, Warning, TEXT("Torre X:%d Y:%d ha cambiato stato!"), Tower->GridPosition.X, Tower->GridPosition.Y);
 		}
 	}
-	// Nota: Dovremmo fare un ciclo su tutte le unità per resettare bHasMovedThisTurn
 }

@@ -50,3 +50,4 @@ void ATile::SetUnitOnTile(AActor* NewUnit)
 {
 	UnitOnTile = NewUnit;
 }
+
