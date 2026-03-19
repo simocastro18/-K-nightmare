@@ -3,6 +3,7 @@
 #include "StrategyTower.h"
 #include "StrategyUnit.h"
 #include "Tile.h"
+#include "Tile.h"
 
 void AStrategyGameMode::BeginPlay()
 {
@@ -137,6 +138,10 @@ void AStrategyGameMode::EvaluateTowers()
 	TArray<AActor*> AllUnits;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyUnit::StaticClass(), AllUnits);
 
+	// Azzeriamo i contatori prima di ricalcolare
+	PlayerTowerCount = 0;
+	AITowerCount = 0;
+
 	for (AActor* TowerActor : AllTowers)
 	{
 		AStrategyTower* Tower = Cast<AStrategyTower>(TowerActor);
@@ -165,28 +170,79 @@ void AStrategyGameMode::EvaluateTowers()
 			}
 		}
 
-		// 2. La Macchina a Stati [cite: 113, 116, 120]
+		// 2. La Macchina a Stati
 		ETowerState OldState = Tower->CurrentState;
 
 		if (bPlayerInZone && bAIInZone)
 		{
-			Tower->CurrentState = ETowerState::Contested; // Entrambi [cite: 122]
+			Tower->CurrentState = ETowerState::Contested;
 		}
 		else if (bPlayerInZone)
 		{
-			Tower->CurrentState = ETowerState::ControlledPlayer; // Solo Player [cite: 117]
+			Tower->CurrentState = ETowerState::ControlledPlayer;
 		}
 		else if (bAIInZone)
 		{
-			Tower->CurrentState = ETowerState::ControlledAI; // Solo IA [cite: 117]
+			Tower->CurrentState = ETowerState::ControlledAI;
 		}
-		// Se (bPlayerInZone == false && bAIInZone == false), la torre NON CAMBIA stato (rimane a chi la possedeva) 
 
-		// 3. Se lo stato è cambiato, avvisiamo il Blueprint per cambiare colore!
+		// Se lo stato è cambiato, avvisiamo il Blueprint per cambiare colore!
 		if (OldState != Tower->CurrentState)
 		{
 			Tower->OnStateChanged(Tower->CurrentState);
 			UE_LOG(LogTemp, Warning, TEXT("Torre X:%d Y:%d ha cambiato stato!"), Tower->GridPosition.X, Tower->GridPosition.Y);
 		}
+
+		// --- NUOVO: AGGIORNIAMO IL CONTEGGIO TORRI ---
+		if (Tower->CurrentState == ETowerState::ControlledPlayer)
+		{
+			PlayerTowerCount++;
+		}
+		else if (Tower->CurrentState == ETowerState::ControlledAI)
+		{
+			AITowerCount++;
+		}
+	}
+
+	// --- NUOVO: VALUTAZIONE DOMINIO E VITTORIA ---
+
+	UE_LOG(LogTemp, Warning, TEXT("Punteggio Torri -> Player: %d | AI: %d"), PlayerTowerCount, AITowerCount);
+
+	// Controllo Dominio Player (>= 2 Torri)
+	if (PlayerTowerCount >= 2)
+	{
+		PlayerDominanceTurns++;
+		UE_LOG(LogTemp, Warning, TEXT("Il Player domina per il turno %d!"), PlayerDominanceTurns);
+
+		if (PlayerDominanceTurns >= 2)
+		{
+			UE_LOG(LogTemp, Error, TEXT("VITTORIA! Il Player ha mantenuto 2 torri per 2 turni consecutivi!"));
+			OnGameOver(ETeam::Player);
+			return; // Usciamo, la partita è finita
+		}
+	}
+	else
+	{
+		// Se perde il dominio, il contatore si azzera
+		PlayerDominanceTurns = 0;
+	}
+
+	// Controllo Dominio AI (>= 2 Torri)
+	if (AITowerCount >= 2)
+	{
+		AIDominanceTurns++;
+		UE_LOG(LogTemp, Warning, TEXT("L'IA domina per il turno %d!"), AIDominanceTurns);
+
+		if (AIDominanceTurns >= 2)
+		{
+			UE_LOG(LogTemp, Error, TEXT("SCONFITTA! L'IA ha mantenuto 2 torri per 2 turni consecutivi!"));
+			OnGameOver(ETeam::AI);
+			return; // Usciamo, la partita è finita
+		}
+	}
+	else
+	{
+		// Se perde il dominio, il contatore si azzera
+		AIDominanceTurns = 0;
 	}
 }

@@ -41,6 +41,7 @@ void AStrategyUnit::InitializeUnit(int32 InOwnerID, ATile* StartingTile)
 	PlayerOwner = InOwnerID;
 	CurrentTile = StartingTile;
 	CurrentHealth = MaxHealth;
+	OriginalSpawnTile = StartingTile;
 	bHasActedThisTurn = false;
 }
 
@@ -58,11 +59,10 @@ void AStrategyUnit::ReceiveDamage(int32 DamageAmount)
 
 	if (CurrentHealth <= 0)
 	{
-		CurrentHealth = 0;
+		RespawnUnit();
 		// Rimuoviamo l'unità dalla griglia (verrà poi gestito il respawn come da PDF)
-		UE_LOG(LogTemp, Warning, TEXT("L'unità %s è stata distrutta!"), *UnitLogID);
-		// TODO: Avvisare il GameMode prima di distruggere l'Actor per gestire il Respawn
-		Destroy();
+		UE_LOG(LogTemp, Warning, TEXT("L'unità %s è stata respownata!"), *UnitLogID);
+		
 	}
 }
 
@@ -269,5 +269,36 @@ void AStrategyUnit::ExecuteAIMovement()
 		PathToFollow.Add(GetActorLocation());
 		CurrentPathIndex = 0;
 		bIsMoving = true;
+	}
+}
+
+void AStrategyUnit::RespawnUnit()
+{
+	UE_LOG(LogTemp, Warning, TEXT("L'unita' %s e' stata sconfitta e torna alla base!"), *UnitLogID);
+
+	// 1. Libera la cella in cui è "morta"
+	if (CurrentTile && CurrentTile->UnitOnTile == this)
+	{
+		CurrentTile->UnitOnTile = nullptr;
+	}
+
+	// 2. Ripristina i punti vita al massimo
+	CurrentHealth = MaxHealth;
+
+	// 3. Torna alla cella di origine
+	if (OriginalSpawnTile)
+	{
+		// Nel caso (raro) ci sia qualcuno sulla cella di spawn, lo ignoriamo o lo sovrascriviamo
+		// Le specifiche dicono di tornare alla posizione iniziale 
+		CurrentTile = OriginalSpawnTile;
+		CurrentTile->UnitOnTile = this;
+
+		// 4. Sposta fisicamente il modello 3D alla base
+		FVector NewLocation = CurrentTile->GetActorLocation() + FVector(0, 0, 100);
+		SetActorLocation(NewLocation);
+
+		// 5. Interrompe eventuali movimenti o azioni in corso
+		bIsMoving = false;
+		PathToFollow.Empty();
 	}
 }

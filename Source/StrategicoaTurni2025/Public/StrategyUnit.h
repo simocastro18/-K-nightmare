@@ -129,6 +129,20 @@ public:
 	UFUNCTION()
 	void ExecuteAIMovement(); // La funzione che partirà DOPO il delay
 
+	// --- SISTEMA DI RESPAWN ---
+
+	// Memorizza la cella iniziale per il respawn
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Grid")
+	ATile* OriginalSpawnTile;
+
+	// Funzione che gestisce la "falsa morte" e il ritorno alla base
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	void RespawnUnit();
+
+	// Aggiungi questo: creerà un nodo Evento rosso nel Blueprint!
+	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
+	void SetupHealthBarUI();
+
 protected:
 	virtual void BeginPlay() override;
 };

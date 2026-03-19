@@ -244,6 +244,8 @@ void AGameField::SpawnInitialEntities()
 				StrategyUnit->InitializeUnit(OwnerID, T);
 				StrategyUnit->UnitTeam = AssignedTeam;
 				StrategyUnit->GameFieldRef = this;
+
+				StrategyUnit->SetupHealthBarUI();
 			}
 			Zone.RemoveAt(Rnd);
 		}

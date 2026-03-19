@@ -39,6 +39,29 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI")
 	void ProcessAITurn();
 
+	// --- SISTEMA DI VITTORIA ---
+
+	// Da quanti turni consecutivi il Player ha il dominio (>= 2 torri)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
+	int32 PlayerDominanceTurns = 0;
+
+	// Da quanti turni consecutivi l'AI ha il dominio (>= 2 torri)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
+	int32 AIDominanceTurns = 0;
+
+	// Quante torri ha attualmente il Player
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
+	int32 PlayerTowerCount = 0;
+
+	// Quante torri ha attualmente l'AI
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
+	int32 AITowerCount = 0;
+
+	// --- UI DEL GAME OVER ---
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Game Flow")
+	void OnGameOver(ETeam Winner);
+
 protected:
 	virtual void BeginPlay() override;
 
