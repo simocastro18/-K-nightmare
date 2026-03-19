@@ -3,6 +3,7 @@
 #include "StrategyUnit.h"
 #include "StrategyTower.h"
 #include "Math/UnrealMathUtility.h"
+#include "Kismet/GameplayStatics.h"
 
 AGameField::AGameField()
 {
@@ -225,6 +226,7 @@ void AGameField::SpawnInitialEntities()
 	}
 
 	// Funzione Lambda aggiornata per assegnare Team e OwnerID
+	// Funzione Lambda aggiornata per assegnare Team, OwnerID e Inizializzare la UI senza Delay!
 	auto SpawnUnitInZone = [&](TSubclassOf<AActor> LClass, TArray<ATile*>& Zone, ETeam AssignedTeam, int32 OwnerID) {
 		if (!LClass || Zone.Num() == 0) return;
 
@@ -232,7 +234,12 @@ void AGameField::SpawnInitialEntities()
 		ATile* T = Zone[Rnd];
 
 		FVector Loc = T->GetActorLocation() + FVector(0, 0, 100);
-		AActor* NewUnit = GetWorld()->SpawnActor<AActor>(LClass, Loc, FRotator::ZeroRotator, SpawnParams);
+
+		// 1. Creiamo la Trasformazione per lo spawn (Risolve l'errore SpawnTransform)
+		FTransform SpawnTransform(FRotator::ZeroRotator, Loc);
+
+		// 2. SPAWN RITARDATO (Deferred)
+		AActor* NewUnit = GetWorld()->SpawnActorDeferred<AActor>(LClass, SpawnTransform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 		if (NewUnit)
 		{
 			T->SetTileStatus(-1, ETileStatus::OCCUPIED);
@@ -244,12 +251,20 @@ void AGameField::SpawnInitialEntities()
 				StrategyUnit->InitializeUnit(OwnerID, T);
 				StrategyUnit->UnitTeam = AssignedTeam;
 				StrategyUnit->GameFieldRef = this;
+			}
 
+			// 3. COMPLETAMO LO SPAWN (Qui parte il BeginPlay e si crea la barra della vita fisica)
+			UGameplayStatics::FinishSpawningActor(NewUnit, SpawnTransform);
+
+			// 4. ORA CHIAMIAMO LA UI (Adesso il componente esiste al 100% e il Cast non fallirà!)
+			if (StrategyUnit)
+			{
 				StrategyUnit->SetupHealthBarUI();
 			}
+
 			Zone.RemoveAt(Rnd);
 		}
-		};
+	};
 
 	// SCHIERAMENTO PLAYER
 	SpawnUnitInZone(BrawlerClass, PlayerZone, ETeam::Player, 0);
