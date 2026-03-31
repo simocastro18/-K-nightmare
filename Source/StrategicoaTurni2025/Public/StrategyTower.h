@@ -22,6 +22,27 @@ class STRATEGICOATURNI2025_API AStrategyTower : public AActor
 public:
 	AStrategyTower();
 
+	// La Mesh visiva della Torre
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	class UStaticMeshComponent* TowerMesh;
+
+	// --- MATERIALI DEGLI STATI ---
+	UPROPERTY(EditDefaultsOnly, Category = "Tower Visuals")
+	class UMaterialInterface* NeutralMaterial;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Tower Visuals")
+	class UMaterialInterface* PlayerMaterial;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Tower Visuals")
+	class UMaterialInterface* AIMaterial;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Tower Visuals")
+	class UMaterialInterface* ContestedMaterial;
+
+	// SOSTITUIAMO IL VECCHIO BlueprintImplementableEvent CON UNA FUNZIONE C++ VERA
+	UFUNCTION(BlueprintCallable, Category = "Tower")
+	void UpdateTowerVisuals(ETowerState NewState);
+
 	// Memorizziamo lo stato e la posizione
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tower")
 	ETowerState CurrentState;
@@ -29,7 +50,8 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tower")
 	FIntPoint GridPosition;
 
+	//Vecchio BP
 	// Questo evento chiamerà il Blueprint per cambiare il colore visivo! 
-	UFUNCTION(BlueprintImplementableEvent, Category = "Tower")
-	void OnStateChanged(ETowerState NewState);
+	//UFUNCTION(BlueprintImplementableEvent, Category = "Tower")
+	//void OnStateChanged(ETowerState NewState);
 };

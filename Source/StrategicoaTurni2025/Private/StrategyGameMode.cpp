@@ -189,8 +189,17 @@ void AStrategyGameMode::EvaluateTowers()
 		// Se lo stato è cambiato, avvisiamo il Blueprint per cambiare colore!
 		if (OldState != Tower->CurrentState)
 		{
+			
+			// NUOVA CHIAMATA C++
+			
+			Tower->UpdateTowerVisuals(Tower->CurrentState);
+			UE_LOG(LogTemp, Warning, TEXT("Torre X:%d Y:%d ha cambiato stato!"), Tower->GridPosition.X, Tower->GridPosition.Y);
+			
+			/*
+			vecchio BP
 			Tower->OnStateChanged(Tower->CurrentState);
 			UE_LOG(LogTemp, Warning, TEXT("Torre X:%d Y:%d ha cambiato stato!"), Tower->GridPosition.X, Tower->GridPosition.Y);
+			*/
 		}
 
 		// --- NUOVO: AGGIORNIAMO IL CONTEGGIO TORRI ---
