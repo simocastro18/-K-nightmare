@@ -89,10 +89,7 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 		AStrategyUnit* TargetUnit = Cast<AStrategyUnit>(ClickedTile->UnitOnTile);
 		if (IsValid(TargetUnit))
 		{
-			int32 Damage = SelectedUnit->CalculateDamageToDeal();
-			TargetUnit->ReceiveDamage(Damage);
-
-			UE_LOG(LogTemp, Error, TEXT("ATTACCO! %s infligge %d danni a %s!"), *SelectedUnit->UnitLogID, Damage, *TargetUnit->UnitLogID);
+			SelectedUnit->AttackTarget(TargetUnit);
 
 			SelectedUnit->bHasAttacked = true;
 			SelectedUnit->bIsTurnFinished = true;
@@ -248,6 +245,45 @@ void AStrategyPlayerController::SetupInputComponent()
 		if (ClickAction)
 		{
 			EnhancedInputComponent->BindAction(ClickAction, ETriggerEvent::Started, this, &AStrategyPlayerController::ExecuteClick);
+		}
+	}
+}
+
+
+
+void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
+{
+	if (!IsValid(TargetUnit) || !IsValid(this->CurrentTile) || !IsValid(TargetUnit->CurrentTile)) return;
+
+	// 1. Calcola e infligge il danno base
+	int32 Damage = CalculateDamageToDeal();
+	TargetUnit->ReceiveDamage(Damage);
+
+	// Log a schermo dell'attacco principale (Rosso)
+	if (GEngine) {
+		FString AttackerName = (this->UnitTeam == ETeam::Player) ? TEXT("Giocatore") : TEXT("IA");
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("%s: %s infligge %d danni a %s!"), *AttackerName, *this->UnitLogID, Damage, *TargetUnit->UnitLogID));
+	}
+
+	// 2. REGOLE DEL CONTRATTACCO 
+	if (this->AttackType == EAttackType::RANGED)
+	{
+		int32 DistX = FMath::Abs(this->CurrentTile->GetGridPosition().X - TargetUnit->CurrentTile->GetGridPosition().X);
+		int32 DistY = FMath::Abs(this->CurrentTile->GetGridPosition().Y - TargetUnit->CurrentTile->GetGridPosition().Y);
+		int32 Distance = DistX + DistY;
+
+		bool bTargetIsSniper = (TargetUnit->AttackType == EAttackType::RANGED);
+		bool bTargetIsBrawlerAtRange1 = (TargetUnit->AttackType == EAttackType::MELEE && Distance == 1);
+
+		if (bTargetIsSniper || bTargetIsBrawlerAtRange1)
+		{
+			int32 CounterDamage = FMath::RandRange(1, 3);
+			this->ReceiveDamage(CounterDamage);
+
+			// Log a schermo del contrattacco (Arancione)
+			if (GEngine) {
+				GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Orange, FString::Printf(TEXT("CONTRATTACCO! %s subisce %d danni di riflesso!"), *this->UnitLogID, CounterDamage));
+			}
 		}
 	}
 }

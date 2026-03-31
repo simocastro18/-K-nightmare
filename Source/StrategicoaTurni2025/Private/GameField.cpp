@@ -189,7 +189,7 @@ void AGameField::SpawnInitialEntities()
 			AActor* NewTower = GetWorld()->SpawnActor<AActor>(TowerClass, Loc, FRotator::ZeroRotator, SpawnParams);
 			if (NewTower)
 			{
-				BestTile->SetTileStatus(-1, ETileStatus::OBSTACLE); // Ostacolo [cite: 108]
+				BestTile->SetTileStatus(-1, ETileStatus::OBSTACLE); // Ostacolo
 
 				// AGGIUNTA: Diciamo alla torre dove si trova esattamente!
 				AStrategyTower* StratTower = Cast<AStrategyTower>(NewTower);
@@ -205,7 +205,7 @@ void AGameField::SpawnInitialEntities()
 	SpawnTowerAtBestLocation(FIntPoint(12, 5));
 	SpawnTowerAtBestLocation(FIntPoint(12, 19));
 
-	// FASE 2: PIAZZAMENTO UNITA' 
+	// FASE 2: PIAZZAMENTO UNITA' 
 	TArray<ATile*> PlayerZone;
 	TArray<ATile*> AIZone;
 
@@ -225,54 +225,54 @@ void AGameField::SpawnInitialEntities()
 		}
 	}
 
-	// Funzione Lambda aggiornata per assegnare Team e OwnerID
-	// Funzione Lambda aggiornata per assegnare Team, OwnerID e Inizializzare la UI senza Delay!
-	auto SpawnUnitInZone = [&](TSubclassOf<AActor> LClass, TArray<ATile*>& Zone, ETeam AssignedTeam, int32 OwnerID) {
-		if (!LClass || Zone.Num() == 0) return;
+// Funzione Lambda aggiornata per assegnare Team, LogID e Yaw per la rotazione!
+auto SpawnUnitInZone = [&](TSubclassOf<AActor> LClass, TArray<ATile*>& Zone, ETeam AssignedTeam, FString UnitLogID, float SpawnYaw) {
+	if (!LClass || Zone.Num() == 0) return;
 
-		int32 Rnd = FMath::RandRange(0, Zone.Num() - 1);
-		ATile* T = Zone[Rnd];
+	int32 Rnd = FMath::RandRange(0, Zone.Num() - 1);
+	ATile* T = Zone[Rnd];
 
-		FVector Loc = T->GetActorLocation() + FVector(0, 0, 100);
+	// Calcoliamo la posizione in altezza
+	FVector Loc = T->GetActorLocation() + FVector(0, 0, 100);
 
-		// 1. Creiamo la Trasformazione per lo spawn (Risolve l'errore SpawnTransform)
-		FTransform SpawnTransform(FRotator::ZeroRotator, Loc);
+	FVector SpawnScale(0.5f, 0.5f, 0.5f);
+	FTransform SpawnTransform(FRotator(0.0f, SpawnYaw, 0.0f), Loc, SpawnScale);
 
-		// 2. SPAWN RITARDATO (Deferred)
-		AActor* NewUnit = GetWorld()->SpawnActorDeferred<AActor>(LClass, SpawnTransform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-		if (NewUnit)
+	// 2. SPAWN RITARDATO
+	AActor* NewUnit = GetWorld()->SpawnActorDeferred<AActor>(LClass, SpawnTransform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (NewUnit)
+	{
+		T->SetTileStatus(-1, ETileStatus::OCCUPIED);
+		T->SetUnitOnTile(NewUnit);
+
+		AStrategyUnit* StrategyUnit = Cast<AStrategyUnit>(NewUnit);
+		if (StrategyUnit)
 		{
-			T->SetTileStatus(-1, ETileStatus::OCCUPIED);
-			T->SetUnitOnTile(NewUnit);
-
-			AStrategyUnit* StrategyUnit = Cast<AStrategyUnit>(NewUnit);
-			if (StrategyUnit)
-			{
-				StrategyUnit->InitializeUnit(OwnerID, T);
-				StrategyUnit->UnitTeam = AssignedTeam;
-				StrategyUnit->GameFieldRef = this;
-			}
-
-			// 3. COMPLETAMO LO SPAWN (Qui parte il BeginPlay e si crea la barra della vita fisica)
-			UGameplayStatics::FinishSpawningActor(NewUnit, SpawnTransform);
-
-			// 4. ORA CHIAMIAMO LA UI (Adesso il componente esiste al 100% e il Cast non fallirà!)
-			if (StrategyUnit)
-			{
-				StrategyUnit->SetupHealthBarUI();
-			}
-
-			Zone.RemoveAt(Rnd);
+			// Settiamo solo il riferimento alla mappa prima di finire lo spawn
+			StrategyUnit->GameFieldRef = this;
 		}
-	};
 
-	// SCHIERAMENTO PLAYER
-	SpawnUnitInZone(BrawlerClass, PlayerZone, ETeam::Player, 0);
-	SpawnUnitInZone(SniperClass, PlayerZone, ETeam::Player, 0);
+		// 3. COMPLETAMO LO SPAWN: Qui Unreal crea fisicamente il modello 3D e la barra della vita!
+		UGameplayStatics::FinishSpawningActor(NewUnit, SpawnTransform);
 
-	// SCHIERAMENTO AI
-	SpawnUnitInZone(BrawlerClass, AIZone, ETeam::AI, 1);
-	SpawnUnitInZone(SniperClass, AIZone, ETeam::AI, 1);
+		// 4. ORA CHE ESISTE TUTTO, LO INIZIALIZZIAMO (La HealthBar ora esiste e si colorerà!)
+		if (StrategyUnit)
+		{
+			StrategyUnit->InitializeUnit(UnitLogID, AssignedTeam, SpawnYaw, T);
+		}
+
+		Zone.RemoveAt(Rnd);
+	}
+	}; // <-- Qui finisce la Lambda
+
+// --- SCHIERAMENTO PLAYER (Guarda in alto, Yaw = 0.0f) ---
+// --- SCHIERAMENTO PLAYER ---
+SpawnUnitInZone(BrawlerClass, PlayerZone, ETeam::Player, TEXT("Brawler_P"), -90.0f);
+SpawnUnitInZone(SniperClass, PlayerZone, ETeam::Player, TEXT("Sniper_P"), -90.0f);
+
+// --- SCHIERAMENTO AI ---
+SpawnUnitInZone(BrawlerClass, AIZone, ETeam::AI, TEXT("Brawler_AI"), 90.0f); // o 270.0f
+SpawnUnitInZone(SniperClass, AIZone, ETeam::AI, TEXT("Sniper_AI"), 90.0f);
 }
 
 void AGameField::ClearHighlightedTiles()

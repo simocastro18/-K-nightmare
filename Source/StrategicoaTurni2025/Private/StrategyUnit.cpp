@@ -36,6 +36,7 @@ void AStrategyUnit::BeginPlay()
 	CurrentHealth = MaxHealth; // All'avvio la vita è al massimo
 }
 
+/*
 void AStrategyUnit::InitializeUnit(int32 InOwnerID, ATile* StartingTile)
 {
 	PlayerOwner = InOwnerID;
@@ -44,6 +45,7 @@ void AStrategyUnit::InitializeUnit(int32 InOwnerID, ATile* StartingTile)
 	OriginalSpawnTile = StartingTile;
 	bHasActedThisTurn = false;
 }
+*/
 
 int32 AStrategyUnit::CalculateDamageToDeal()
 {
@@ -54,6 +56,9 @@ int32 AStrategyUnit::CalculateDamageToDeal()
 void AStrategyUnit::ReceiveDamage(int32 DamageAmount)
 {
 	CurrentHealth -= DamageAmount;
+
+	// CHIAMIAMO IL BLUEPRINT PER FAR USCIRE IL NUMERINO!
+	ShowFloatingDamage(DamageAmount);
 
 	UE_LOG(LogTemp, Warning, TEXT("L'unità %s ha subito %d danni. Salute rimanente: %d"), *UnitLogID, DamageAmount, CurrentHealth);
 
@@ -136,11 +141,12 @@ void AStrategyUnit::Tick(float DeltaTime)
 								AStrategyUnit* TargetUnit = Cast<AStrategyUnit>(TargetTile->UnitOnTile);
 								if (TargetUnit && TargetUnit->UnitTeam == ETeam::Player)
 								{
-									int32 Damage = CalculateDamageToDeal();
-									TargetUnit->ReceiveDamage(Damage);
-									UE_LOG(LogTemp, Error, TEXT("IA: %s attacca e infligge %d danni a %s!"), *this->UnitLogID, Damage, *TargetUnit->UnitLogID);
+									// 1. Chiamiamo la nuova funzione centralizzata (fa tutto lei: Danni, Contrattacchi e Log!)
+									this->AttackTarget(TargetUnit);
+
+									// 2. Segniamo che ha attaccato e fermiamo il ciclo
 									bAttacked = true;
-									break; // Colpisce il primo che trova e si ferma
+									break;
 								}
 							}
 						}
@@ -301,4 +307,53 @@ void AStrategyUnit::RespawnUnit()
 		bIsMoving = false;
 		PathToFollow.Empty();
 	}
+}
+
+void AStrategyUnit::InitializeUnit(const FString& InUnitLogID, ETeam InUnitTeam, float InInitialYaw, ATile* StartingTile)
+{
+	this->UnitLogID = InUnitLogID;
+	this->UnitTeam = InUnitTeam;
+
+	// 1. Impostiamo la cella di partenza e i dati di base
+	this->CurrentTile = StartingTile;
+	this->OriginalSpawnTile = StartingTile;
+	this->CurrentHealth = MaxHealth;
+	this->bHasActedThisTurn = false;
+
+	// Nel tuo codice originale usavi PlayerOwner (0 per Player, 1 per AI), lo impostiamo per sicurezza
+	this->PlayerOwner = (InUnitTeam == ETeam::Player) ? 0 : 1;
+
+	// 2. Applichiamo la rotazione (Yaw) per far guardare la pedina nella direzione giusta.
+	SetActorRotation(FRotator(0.0f, InInitialYaw, 0.0f));
+
+	
+
+	// --- LOGICA MATERIALI IN C++ (PULITA E UNIFICATA) ---
+	
+	if (UnitMesh)
+	{
+		UMaterialInterface* MatToUse = nullptr;
+
+		// Scegliamo il materiale in base al team con un classico IF
+		if (UnitTeam == ETeam::Player)
+		{
+			MatToUse = PlayerMaterial;
+		}
+		else if (UnitTeam == ETeam::AI)
+		{
+			MatToUse = AIMaterial;
+		}
+
+		// Se abbiamo trovato un materiale valido, lo applichiamo a tutti gli slot
+		if (MatToUse != nullptr)
+		{
+			int32 NumMaterials = UnitMesh->GetNumMaterials();
+			for (int32 i = 0; i < NumMaterials; ++i)
+			{
+				UnitMesh->SetMaterial(i, MatToUse);
+			}
+		}
+	}
+	// 3. Inizializziamo l'interfaccia (Barra della vita e colori)
+	this->SetupHealthBarUI();
 }

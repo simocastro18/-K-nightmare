@@ -30,6 +30,13 @@ class STRATEGICOATURNI2025_API AStrategyUnit : public AActor
 public:
 	AStrategyUnit();
 
+	// --- MATERIALI DELLE FAZIONI ---
+	UPROPERTY(EditDefaultsOnly, Category = "Unit Visuals")
+	class UMaterialInterface* PlayerMaterial;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Unit Visuals")
+	class UMaterialInterface* AIMaterial;
+
 	// --- COMPONENTI VISIVI ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	USceneComponent* SceneRoot;
@@ -79,14 +86,18 @@ public:
 	bool bHasActedThisTurn;
 
 	// --- FUNZIONI DI COMBATTIMENTO E GESTIONE ---
-	UFUNCTION(BlueprintCallable, Category = "Unit Actions")
-	void InitializeUnit(int32 InOwnerID, ATile* StartingTile);
 
 	UFUNCTION(BlueprintCallable, Category = "Unit Actions")
 	void ReceiveDamage(int32 DamageAmount);
 
+	UFUNCTION(BlueprintCallable, Category = "Unit")
+	void InitializeUnit(const FString& InUnitLogID, ETeam InUnitTeam, float InInitialYaw, class ATile* StartingTile);
+
 	UFUNCTION(BlueprintCallable, Category = "Unit Actions")
 	int32 CalculateDamageToDeal();
+
+	UFUNCTION(BlueprintCallable, Category = "Unit Actions")
+	void AttackTarget(AStrategyUnit* TargetUnit);
 
 	// --- NUOVO: INTELLIGENZA ARTIFICIALE ---
 	UFUNCTION(BlueprintCallable, Category = "AI")
@@ -103,6 +114,7 @@ public:
 	bool bIsTurnFinished = false;
 
 	// --- VARIABILI PER IL MOVIMENTO ---
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
 	bool bIsMoving = false;
 
@@ -111,7 +123,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
 	float MoveSpeed = 600.0f;
-
+	
 	TArray<FVector> PathToFollow;
 	int32 CurrentPathIndex = 0;
 
@@ -143,6 +155,10 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
 	void SetupHealthBarUI();
 
+	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
+	void ShowFloatingDamage(int32 DamageReceived);
+
+	
 protected:
 	virtual void BeginPlay() override;
 };
