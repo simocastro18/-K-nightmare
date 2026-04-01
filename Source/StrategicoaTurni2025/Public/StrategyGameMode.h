@@ -6,6 +6,21 @@
 #include "StrategyUnit.h"
 #include "StrategyGameMode.generated.h"
 
+USTRUCT(BlueprintType)
+struct FGameConfig
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config")
+	float NoiseScale = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config")
+	int32 GridSizeX = 25;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config")
+	int32 GridSizeY = 25;
+};
+
 UENUM(BlueprintType)
 enum class ETurnState : uint8
 {
@@ -35,7 +50,7 @@ public:
 	void RestartGame();
 
 	UFUNCTION(BlueprintCallable, Category = "Game Flow")
-	void StartGameWithConfig(float NoiseScale, int32 GridSizeX, int32 GridSizeY);
+	void StartGameWithConfig(FGameConfig Config);
 
 	UPROPERTY(BlueprintReadOnly, Category = "Game Flow")
 	AGameField* MapGenerator;

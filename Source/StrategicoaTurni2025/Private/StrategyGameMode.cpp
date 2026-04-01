@@ -55,17 +55,29 @@ void AStrategyGameMode::RestartGame()
 	UGameplayStatics::OpenLevel(GetWorld(), FName(*CurrentLevelName));
 }
 
-void AStrategyGameMode::StartGameWithConfig(float InNoiseScale, int32 InGridSizeX, int32 InGridSizeY)
-{	
-	bIsGameOver = false;
+void AStrategyGameMode::StartGameWithConfig(FGameConfig Config)
+{
+	bIsGameOver = false; // Assicuriamoci che il Kill Switch sia spento all'avvio!
+
 	if (MapGenerator)
 	{
-		MapGenerator->NoiseScale = InNoiseScale;
-		MapGenerator->GridSizeX = InGridSizeX;
-		MapGenerator->GridSizeY = InGridSizeY;
+		// 1. Usiamo i dati della valigetta!
+		MapGenerator->NoiseScale = Config.NoiseScale;
+		MapGenerator->GridSizeX = Config.GridSizeX;
+		MapGenerator->GridSizeY = Config.GridSizeY;
 		MapGenerator->GenerateGridData();
 		MapGenerator->SpawnInitialEntities();
-		// LANCIO DELLA MONETA (Random 50/50) 
+
+		// 2. Prepariamo il Mouse e l'Input direttamente in C++
+		APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		if (PC)
+		{
+			FInputModeGameAndUI InputMode;
+			PC->SetInputMode(InputMode);
+			PC->bShowMouseCursor = true;
+		}
+
+		// 3. LANCIO DELLA MONETA (Random 50/50)
 		if (FMath::RandBool())
 		{
 			CurrentTurnState = ETurnState::PlayerTurn;
@@ -75,7 +87,6 @@ void AStrategyGameMode::StartGameWithConfig(float InNoiseScale, int32 InGridSize
 		{
 			CurrentTurnState = ETurnState::AITurn;
 			UE_LOG(LogTemp, Warning, TEXT("=== LANCIO MONETA: Vince l'IA! ==="));
-			// Avviamo l'IA se ha vinto lei
 			GetWorldTimerManager().SetTimerForNextTick(this, &AStrategyGameMode::ProcessAITurn);
 		}
 	}
