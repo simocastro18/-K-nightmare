@@ -19,6 +19,21 @@ class STRATEGICOATURNI2025_API AStrategyGameMode : public AGameModeBase
 	GENERATED_BODY()
 
 public:
+
+	// Riferimenti ai Blueprint dei Widget (da assegnare nell'editor)
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<class UUserWidget> WinWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<class UUserWidget> LoseWidgetClass;
+
+	// Sostituiamo l'evento Blueprint con una funzione C++
+	void HandleGameOver(ETeam Winner);
+
+	// Funzione per il Rematch (carica il livello corrente)
+	UFUNCTION(BlueprintCallable, Category = "Game Flow")
+	void RestartGame();
+
 	UFUNCTION(BlueprintCallable, Category = "Game Flow")
 	void StartGameWithConfig(float NoiseScale, int32 GridSizeX, int32 GridSizeY);
 
@@ -57,10 +72,15 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
 	int32 AITowerCount = 0;
 
-	// --- UI DEL GAME OVER ---
+	// IL KILL SWITCH
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
+	bool bIsGameOver = false;
 
+	// --- UI DEL GAME OVER ---
+	/*
 	UFUNCTION(BlueprintImplementableEvent, Category = "Game Flow")
 	void OnGameOver(ETeam Winner);
+	*/
 
 protected:
 	virtual void BeginPlay() override;

@@ -4,6 +4,7 @@
 #include "StrategyUnit.h"
 #include "Tile.h"
 #include "Tile.h"
+#include "Blueprint/UserWidget.h" // Serve per gestire i Widget
 
 void AStrategyGameMode::BeginPlay()
 {
@@ -18,8 +19,45 @@ void AStrategyGameMode::BeginPlay()
 	}
 }
 
-void AStrategyGameMode::StartGameWithConfig(float InNoiseScale, int32 InGridSizeX, int32 InGridSizeY)
+void AStrategyGameMode::HandleGameOver(ETeam Winner)
 {
+	bIsGameOver = true; // ATTIVAZIONE KILL SWITCH
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (!PC) return;
+
+	// 1. Scegliamo quale widget creare
+	TSubclassOf<UUserWidget> WidgetToCreate = (Winner == ETeam::Player) ? WinWidgetClass : LoseWidgetClass;
+
+	if (WidgetToCreate)
+	{
+		// 2. Creiamo il widget
+		UUserWidget* GameOverWidget = CreateWidget<UUserWidget>(GetWorld(), WidgetToCreate);
+		if (GameOverWidget)
+		{
+			GameOverWidget->AddToViewport();
+
+			// 3. Impostiamo l'input mode (Blocca il gioco, sblocca il mouse)
+			FInputModeUIOnly InputMode;
+			InputMode.SetWidgetToFocus(GameOverWidget->TakeWidget());
+			PC->SetInputMode(InputMode);
+			PC->bShowMouseCursor = true;
+			UGameplayStatics::SetGamePaused(GetWorld(), true);
+		}
+	}
+}
+
+void AStrategyGameMode::RestartGame()
+{
+	// Prende il nome del livello attuale e lo ricarica
+	FString CurrentLevelName = GetWorld()->GetMapName();
+	CurrentLevelName.RemoveFromStart(GetWorld()->StreamingLevelsPrefix);
+
+	UGameplayStatics::OpenLevel(GetWorld(), FName(*CurrentLevelName));
+}
+
+void AStrategyGameMode::StartGameWithConfig(float InNoiseScale, int32 InGridSizeX, int32 InGridSizeY)
+{	
+	bIsGameOver = false;
 	if (MapGenerator)
 	{
 		MapGenerator->NoiseScale = InNoiseScale;
@@ -70,6 +108,9 @@ void AStrategyGameMode::CheckRemainingMoves()
 void AStrategyGameMode::EndTurn()
 {
 	EvaluateTowers();
+
+	if (bIsGameOver) return;
+	
 	TArray<AActor*> AllUnits;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyUnit::StaticClass(), AllUnits);
 
@@ -226,7 +267,7 @@ void AStrategyGameMode::EvaluateTowers()
 		if (PlayerDominanceTurns >= 2)
 		{
 			UE_LOG(LogTemp, Error, TEXT("VITTORIA! Il Player ha mantenuto 2 torri per 2 turni consecutivi!"));
-			OnGameOver(ETeam::Player);
+			this->HandleGameOver(ETeam::Player);
 			return; // Usciamo, la partita è finita
 		}
 	}
@@ -245,7 +286,7 @@ void AStrategyGameMode::EvaluateTowers()
 		if (AIDominanceTurns >= 2)
 		{
 			UE_LOG(LogTemp, Error, TEXT("SCONFITTA! L'IA ha mantenuto 2 torri per 2 turni consecutivi!"));
-			OnGameOver(ETeam::AI);
+			this->HandleGameOver(ETeam::Player);
 			return; // Usciamo, la partita è finita
 		}
 	}
