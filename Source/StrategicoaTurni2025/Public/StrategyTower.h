@@ -50,6 +50,8 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tower")
 	FIntPoint GridPosition;
 
+protected:
+	virtual void BeginPlay() override;
 	//Vecchio BP
 	// Questo evento chiamerà il Blueprint per cambiare il colore visivo! 
 	//UFUNCTION(BlueprintImplementableEvent, Category = "Tower")

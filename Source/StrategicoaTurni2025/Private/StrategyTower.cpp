@@ -10,13 +10,19 @@ AStrategyTower::AStrategyTower()
 	SetRootComponent(TowerMesh);
 }
 
+void AStrategyTower::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// Appena la partita inizia, applica il colore dello stato attuale (Neutrale)
+	UpdateTowerVisuals(CurrentState);
+}
+
 void AStrategyTower::UpdateTowerVisuals(ETowerState NewState)
 {
-	if (!TowerMesh) return;
-
 	UMaterialInterface* MatToUse = nullptr;
 
-	// Lo stesso identico Switch che avevi nel Blueprint!
+	// Scegliamo il materiale in base allo stato
 	switch (NewState)
 	{
 	case ETowerState::Neutral:
@@ -33,9 +39,15 @@ void AStrategyTower::UpdateTowerVisuals(ETowerState NewState)
 		break;
 	}
 
-	if (MatToUse)
+	// Se abbiamo trovato un materiale E la mesh esiste
+	if (MatToUse != nullptr && TowerMesh != nullptr)
 	{
-		TowerMesh->SetMaterial(0, MatToUse);
+		// Contiamo quanti "pezzi" ha la tua torre e li coloriamo tutti
+		int32 NumMaterials = TowerMesh->GetNumMaterials();
+		for (int32 i = 0; i < NumMaterials; ++i)
+		{
+			TowerMesh->SetMaterial(i, MatToUse);
+		}
 	}
 }
 
