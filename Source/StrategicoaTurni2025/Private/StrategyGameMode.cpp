@@ -190,7 +190,6 @@ void AStrategyGameMode::EvaluateTowers()
 	TArray<AActor*> AllUnits;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyUnit::StaticClass(), AllUnits);
 
-	// Azzeriamo i contatori prima di ricalcolare
 	PlayerTowerCount = 0;
 	AITowerCount = 0;
 
@@ -202,15 +201,12 @@ void AStrategyGameMode::EvaluateTowers()
 		bool bPlayerInZone = false;
 		bool bAIInZone = false;
 
-		// 1. Controlliamo chi c'è nella Zona di Cattura (Raggio 2) 
 		for (AActor* UnitActor : AllUnits)
 		{
 			AStrategyUnit* Unit = Cast<AStrategyUnit>(UnitActor);
 			if (Unit && Unit->CurrentHealth > 0 && Unit->CurrentTile)
 			{
 				FIntPoint UnitPos = Unit->CurrentTile->GetGridPosition();
-
-				// Calcolo della distanza (inclusa la diagonale) 
 				int32 DistX = FMath::Abs(UnitPos.X - Tower->GridPosition.X);
 				int32 DistY = FMath::Abs(UnitPos.Y - Tower->GridPosition.Y);
 
@@ -222,88 +218,62 @@ void AStrategyGameMode::EvaluateTowers()
 			}
 		}
 
-		// 2. La Macchina a Stati
 		ETowerState OldState = Tower->CurrentState;
 
-		if (bPlayerInZone && bAIInZone)
-		{
-			Tower->CurrentState = ETowerState::Contested;
-		}
-		else if (bPlayerInZone)
-		{
-			Tower->CurrentState = ETowerState::ControlledPlayer;
-		}
-		else if (bAIInZone)
-		{
-			Tower->CurrentState = ETowerState::ControlledAI;
-		}
+		if (bPlayerInZone && bAIInZone) Tower->CurrentState = ETowerState::Contested;
+		else if (bPlayerInZone) Tower->CurrentState = ETowerState::ControlledPlayer;
+		else if (bAIInZone) Tower->CurrentState = ETowerState::ControlledAI;
 
-		// Se lo stato è cambiato, avvisiamo il Blueprint per cambiare colore!
 		if (OldState != Tower->CurrentState)
 		{
-			
-			// NUOVA CHIAMATA C++
-			
 			Tower->UpdateTowerVisuals(Tower->CurrentState);
 			UE_LOG(LogTemp, Warning, TEXT("Torre X:%d Y:%d ha cambiato stato!"), Tower->GridPosition.X, Tower->GridPosition.Y);
-			
-			/*
-			vecchio BP
-			Tower->OnStateChanged(Tower->CurrentState);
-			UE_LOG(LogTemp, Warning, TEXT("Torre X:%d Y:%d ha cambiato stato!"), Tower->GridPosition.X, Tower->GridPosition.Y);
-			*/
 		}
 
-		// --- NUOVO: AGGIORNIAMO IL CONTEGGIO TORRI ---
-		if (Tower->CurrentState == ETowerState::ControlledPlayer)
-		{
-			PlayerTowerCount++;
-		}
-		else if (Tower->CurrentState == ETowerState::ControlledAI)
-		{
-			AITowerCount++;
-		}
+		if (Tower->CurrentState == ETowerState::ControlledPlayer) PlayerTowerCount++;
+		else if (Tower->CurrentState == ETowerState::ControlledAI) AITowerCount++;
 	}
-
-	// --- NUOVO: VALUTAZIONE DOMINIO E VITTORIA ---
 
 	UE_LOG(LogTemp, Warning, TEXT("Punteggio Torri -> Player: %d | AI: %d"), PlayerTowerCount, AITowerCount);
 
-	// Controllo Dominio Player (>= 2 Torri)
-	if (PlayerTowerCount >= 2)
-	{
-		PlayerDominanceTurns++;
-		UE_LOG(LogTemp, Warning, TEXT("Il Player domina per il turno %d!"), PlayerDominanceTurns);
+	// --- LA CORREZIONE È QUI SOTTO ---
+	// Valutiamo i contatori SOLO alla fine del turno della rispettiva squadra, 
+	// così non si resettano a vicenda in modo incrociato.
 
-		if (PlayerDominanceTurns >= 2)
+	if (CurrentTurnState == ETurnState::PlayerTurn)
+	{
+		if (PlayerTowerCount >= 2)
 		{
-			UE_LOG(LogTemp, Error, TEXT("VITTORIA! Il Player ha mantenuto 2 torri per 2 turni consecutivi!"));
-			this->HandleGameOver(ETeam::Player);
-			return; // Usciamo, la partita è finita
+			PlayerDominanceTurns++;
+			UE_LOG(LogTemp, Warning, TEXT("Il Player domina per il turno %d!"), PlayerDominanceTurns);
+			if (PlayerDominanceTurns >= 2)
+			{
+				UE_LOG(LogTemp, Error, TEXT("VITTORIA! Il Player ha mantenuto 2 torri per 2 turni consecutivi!"));
+				this->HandleGameOver(ETeam::Player);
+				return;
+			}
+		}
+		else
+		{
+			PlayerDominanceTurns = 0; // Azzera solo se è il SUO turno e non ha le torri
 		}
 	}
-	else
+	else if (CurrentTurnState == ETurnState::AITurn)
 	{
-		// Se perde il dominio, il contatore si azzera
-		PlayerDominanceTurns = 0;
-	}
-
-	// Controllo Dominio AI (>= 2 Torri)
-	if (AITowerCount >= 2)
-	{
-		AIDominanceTurns++;
-		UE_LOG(LogTemp, Warning, TEXT("L'IA domina per il turno %d!"), AIDominanceTurns);
-
-		if (AIDominanceTurns >= 2)
+		if (AITowerCount >= 2)
 		{
-			UE_LOG(LogTemp, Error, TEXT("SCONFITTA! L'IA ha mantenuto 2 torri per 2 turni consecutivi!"));
-			this->HandleGameOver(ETeam::AI);
-			return; // Usciamo, la partita è finita
+			AIDominanceTurns++;
+			UE_LOG(LogTemp, Warning, TEXT("L'IA domina per il turno %d!"), AIDominanceTurns);
+			if (AIDominanceTurns >= 2)
+			{
+				UE_LOG(LogTemp, Error, TEXT("SCONFITTA! L'IA ha mantenuto 2 torri per 2 turni consecutivi!"));
+				this->HandleGameOver(ETeam::AI);
+				return;
+			}
 		}
-	}
-	else
-	{
-		// Se perde il dominio, il contatore si azzera
-		AIDominanceTurns = 0;
+		else
+		{
+			AIDominanceTurns = 0; // Azzera solo se è il SUO turno e non ha le torri
+		}
 	}
 }

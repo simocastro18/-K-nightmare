@@ -28,6 +28,13 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* TileMesh;
 
+	// NUOVO: Le mesh per i percorsi e gli attacchi
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UStaticMeshComponent* PathMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UStaticMeshComponent* AttackMesh;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tile Data")
 	FIntPoint TileGridPosition;
 
@@ -49,6 +56,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tile Data")
 	int32 PlayerOwner;
 
+	// NUOVO: Ci serve per sapere se la cella deve rimanere accesa dopo che il mouse se ne va
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tile State")
+	bool bIsCurrentlySelected = false;
+
 	UFUNCTION(BlueprintCallable, Category = "Tile")
 	void SetTileStatus(int32 NewOwner, ETileStatus NewStatus);
 
@@ -60,12 +71,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Tile")
 	void SetUnitOnTile(AActor* NewUnit);
 
-	UFUNCTION(BlueprintImplementableEvent, Category = "Tile Visuals")
+	// MODIFICATO: Non sono più BlueprintImplementableEvent, ora sono normali funzioni C++
+	UFUNCTION(BlueprintCallable, Category = "Tile Visuals")
 	void OnSelectionChanged(bool bIsSelected);
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tile Visuals")
 	void UpdateAttackHighlight(bool bIsHighlighted);
 
+	UPROPERTY()
+	UMaterialInstanceDynamic* DynamicMaterial;
+
+	UFUNCTION(BlueprintCallable, Category = "Tile Visuals")
+	void UpdateTileColor();
+
 protected:
 	virtual void BeginPlay() override;
+
+	// NUOVO: Sostituiscono i nodi del Mouse nel Blueprint
+	//virtual void NotifyActorOnClicked(FKey ButtonPressed) override;
+	virtual void NotifyActorBeginCursorOver() override;
+	virtual void NotifyActorEndCursorOver() override;
 };

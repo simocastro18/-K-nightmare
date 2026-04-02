@@ -4,6 +4,8 @@
 #include "StrategyTower.h"
 #include "Math/UnrealMathUtility.h"
 #include "Kismet/GameplayStatics.h"
+//debug
+//#include "DrawDebugHelpers.h"
 
 AGameField::AGameField()
 {
@@ -67,7 +69,7 @@ void AGameField::GenerateGridData()
 
 	for (const FGridCell& Cell : GridData)
 	{
-		FVector SpawnLocation = FVector(Cell.X * CellSize, Cell.Y * CellSize, Cell.Elevation * (CellSize / 2.0f));
+		FVector SpawnLocation = FVector(Cell.X * CellSize, Cell.Y * CellSize, 0.0f);
 
 		if (TileClass != nullptr)
 		{
@@ -78,6 +80,8 @@ void AGameField::GenerateGridData()
 				NewTile->SetGridPosition(Cell.X, Cell.Y);
 				NewTile->Elevation = Cell.Elevation;
 				NewTile->bIsWalkable = Cell.bIsWalkable;
+
+				NewTile->UpdateTileColor();
 
 				if (!Cell.bIsWalkable) {
 					NewTile->SetTileStatus(-1, ETileStatus::OBSTACLE);
@@ -277,6 +281,11 @@ SpawnUnitInZone(SniperClass, AIZone, ETeam::AI, TEXT("Sniper_AI"), 90.0f);
 
 void AGameField::ClearHighlightedTiles()
 {
+
+	// debug
+	UE_LOG(LogTemp, Error, TEXT("STO SPEGNENDO LE LUCI ROSSE DEI BERSAGLI!"));
+
+
 	for (ATile* Tile : HighlightedTiles)
 	{
 		if (IsValid(Tile))
@@ -458,8 +467,13 @@ void AGameField::HighlightAttackableTiles(AStrategyUnit* AttackingUnit)
 							// Illumina SOLO se l'unità esiste e NON è del mio stesso Team
 							if (IsValid(TargetUnit) && TargetUnit->UnitTeam != AttackingUnit->UnitTeam)
 							{
+
+								// AGGIUNGI QUESTA RIGA PER STANARE IL BUG
+								UE_LOG(LogTemp, Error, TEXT("ACCENDO LUCE ROSSA SU NEMICO: %s in X:%d Y:%d"), *TargetUnit->UnitLogID, CheckTile->GetGridPosition().X, CheckTile->GetGridPosition().Y);
 								CheckTile->UpdateAttackHighlight(true);
 								AttackableTiles.Add(CheckTile);
+								//debug
+								//DrawDebugBox(GetWorld(), CheckTile->GetActorLocation() + FVector(0, 0, 50), FVector(50, 50, 50), FColor::Magenta, false, 5.0f, 0, 10.0f);
 							}
 						}
 					}

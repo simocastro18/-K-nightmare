@@ -63,7 +63,7 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 		}
 		return;
 	}
-	else
+	/*else
 	{
 		if (IsValid(CurrentSelectedTile))
 		{
@@ -72,6 +72,9 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 		ClickedTile->OnSelectionChanged(true);
 		CurrentSelectedTile = ClickedTile;
 	}
+	*/
+
+	CurrentSelectedTile = ClickedTile;
 
 	// 2. Controllo GameMode e Turno
 	AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
@@ -195,7 +198,12 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 				SelectedUnit->StartMoving(Path);
 
 				SelectedUnit->bHasMovedThisTurn = true;
-				GameFieldRef->ClearHighlightedTiles();
+				// --- AGGIUNGI SOLO QUESTA RIGA QUI ---
+				if (IsValid(GameFieldRef))
+				{
+					GameFieldRef->ClearHighlightedTiles(); // Spegne l'azzurro
+					GameFieldRef->ClearAttackableTiles();  // <--- QUESTA SPEGNE IL ROSSO RESIDUO!
+				}
 			}
 			else
 			{
