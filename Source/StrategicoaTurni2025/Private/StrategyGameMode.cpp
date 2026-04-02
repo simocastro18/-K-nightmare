@@ -297,7 +297,7 @@ void AStrategyGameMode::EvaluateTowers()
 		if (AIDominanceTurns >= 2)
 		{
 			UE_LOG(LogTemp, Error, TEXT("SCONFITTA! L'IA ha mantenuto 2 torri per 2 turni consecutivi!"));
-			this->HandleGameOver(ETeam::Player);
+			this->HandleGameOver(ETeam::AI);
 			return; // Usciamo, la partita è finita
 		}
 	}
