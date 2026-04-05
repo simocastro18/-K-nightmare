@@ -75,7 +75,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Tile Visuals")
 	void OnSelectionChanged(bool bIsSelected);
 
-	UFUNCTION(BlueprintImplementableEvent, Category = "Tile Visuals")
+	UFUNCTION(BlueprintCallable, Category = "Tile Visuals")
 	void UpdateAttackHighlight(bool bIsHighlighted);
 
 	UPROPERTY()

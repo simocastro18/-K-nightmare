@@ -56,9 +56,17 @@ int32 AStrategyUnit::CalculateDamageToDeal()
 void AStrategyUnit::ReceiveDamage(int32 DamageAmount)
 {
 	CurrentHealth -= DamageAmount;
+	// Assicuriamoci che la vita non vada sotto lo zero (evita bug grafici sulla barra!)
+	if (CurrentHealth < 0) CurrentHealth = 0;
 
-	// CHIAMIAMO IL BLUEPRINT PER FAR USCIRE IL NUMERINO!
-	ShowFloatingDamage(DamageAmount);
+	// =====================================================================
+	// 1. AGGIORNIAMO LA BARRA DELLA VITA
+	OnHealthChanged(CurrentHealth, MaxHealth);
+
+	// 2. CALCOLIAMO LA POSIZIONE E SPAWNIAMO IL TESTO FLUTTUANTE
+	FVector DamageTextLocation = GetActorLocation() + FVector(0.0f, 0.0f, 150.0f);
+	OnShowFloatingDamage(DamageAmount, DamageTextLocation);
+	// =====================================================================
 
 	UE_LOG(LogTemp, Warning, TEXT("L'unità %s ha subito %d danni. Salute rimanente: %d"), *UnitLogID, DamageAmount, CurrentHealth);
 
@@ -355,5 +363,12 @@ void AStrategyUnit::InitializeUnit(const FString& InUnitLogID, ETeam InUnitTeam,
 		}
 	}
 	// 3. Inizializziamo l'interfaccia (Barra della vita e colori)
-	this->SetupHealthBarUI();
+	//this->SetupHealthBarUI();
+
+	// 1. Diciamo al Blueprint di colorare la barra
+	OnSetupHealthBar(UnitTeam);
+
+	// 2. Aggiorniamo la barra al valore massimo appena nati
+	OnHealthChanged(CurrentHealth, MaxHealth);
 }
+
