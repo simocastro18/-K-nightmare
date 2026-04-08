@@ -298,6 +298,8 @@ void AStrategyUnit::RespawnUnit()
 
 	// 2. Ripristina i punti vita al massimo
 	CurrentHealth = MaxHealth;
+	// Recharge healtbar
+	OnHealthChanged(CurrentHealth, MaxHealth);
 
 	// 3. Torna alla cella di origine
 	if (OriginalSpawnTile)
@@ -370,5 +372,6 @@ void AStrategyUnit::InitializeUnit(const FString& InUnitLogID, ETeam InUnitTeam,
 
 	// 2. Aggiorniamo la barra al valore massimo appena nati
 	OnHealthChanged(CurrentHealth, MaxHealth);
+	
 }
 
