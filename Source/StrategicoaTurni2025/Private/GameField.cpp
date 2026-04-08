@@ -464,16 +464,22 @@ void AGameField::HighlightAttackableTiles(AStrategyUnit* AttackingUnit)
 						{
 							AStrategyUnit* TargetUnit = Cast<AStrategyUnit>(CheckTile->UnitOnTile);
 
-							// Illumina SOLO se l'unità esiste e NON è del mio stesso Team
+							// 1. L'unità deve esistere e NON deve essere del mio stesso team
 							if (IsValid(TargetUnit) && TargetUnit->UnitTeam != AttackingUnit->UnitTeam)
 							{
-
-								// AGGIUNGI QUESTA RIGA PER STANARE IL BUG
-								UE_LOG(LogTemp, Error, TEXT("ACCENDO LUCE ROSSA SU NEMICO: %s in X:%d Y:%d"), *TargetUnit->UnitLogID, CheckTile->GetGridPosition().X, CheckTile->GetGridPosition().Y);
-								CheckTile->UpdateAttackHighlight(true);
-								AttackableTiles.Add(CheckTile);
-								//debug
-								//DrawDebugBox(GetWorld(), CheckTile->GetActorLocation() + FVector(0, 0, 50), FVector(50, 50, 50), FColor::Magenta, false, 5.0f, 0, 10.0f);
+								// 2. REGOLA DELL'ALTEZZA: Posso attaccare solo se il bersaglio è più in basso o al mio stesso livello
+								if (CheckTile->Elevation <= AttackingUnit->CurrentTile->Elevation)
+								{
+									UE_LOG(LogTemp, Error, TEXT("ACCENDO LUCE ROSSA SU NEMICO: %s in X:%d Y:%d"), *TargetUnit->UnitLogID, CheckTile->GetGridPosition().X, CheckTile->GetGridPosition().Y);
+									CheckTile->UpdateAttackHighlight(true);
+									AttackableTiles.Add(CheckTile);
+								}
+								else
+								{
+									// Log opzionale per capire perché la cella non si è accesa
+									UE_LOG(LogTemp, Warning, TEXT("BERSAGLIO %s TROPPO IN ALTO! (Altezza Attaccante: %d, Altezza Bersaglio: %d)"),
+										*TargetUnit->UnitLogID, AttackingUnit->CurrentTile->Elevation, CheckTile->Elevation);
+								}
 							}
 						}
 					}
@@ -481,4 +487,107 @@ void AGameField::HighlightAttackableTiles(AStrategyUnit* AttackingUnit)
 			}
 		}
 	}
+}
+
+TArray<ATile*> AGameField::FindPathAStar(ATile* InStartTile, ATile* InTargetTile)
+{
+	TArray<ATile*> FinalPath;
+	if (!InStartTile || !InTargetTile) return FinalPath;
+
+	TArray<ATile*> OpenSet;
+	TSet<ATile*> ClosedSet;
+
+	TMap<ATile*, int32> GScore; // Costo dal punto di partenza
+	TMap<ATile*, int32> FScore; // GScore + Euristica (Distanza Stimata)
+
+	// Inizializziamo il punto di partenza
+	OpenSet.Add(InStartTile);
+	GScore.Add(InStartTile, 0);
+
+	// L'Euristica (Distanza Manhattan: contiamo i passi in orizzontale e verticale)
+	int32 DistX = FMath::Abs(InStartTile->GetGridPosition().X - InTargetTile->GetGridPosition().X);
+	int32 DistY = FMath::Abs(InStartTile->GetGridPosition().Y - InTargetTile->GetGridPosition().Y);
+	FScore.Add(InStartTile, DistX + DistY);
+
+	// Puliamo la mappa globale così il movimento del tuo gioco funzionerà in automatico!
+	CameFromMap.Empty();
+	CameFromMap.Add(InStartTile, nullptr);
+
+	FIntPoint Directions[4] = { FIntPoint(0, 1), FIntPoint(0, -1), FIntPoint(1, 0), FIntPoint(-1, 0) };
+
+	while (OpenSet.Num() > 0)
+	{
+		// 1. Trova la cella nell'OpenSet con l'FScore più basso
+		int32 BestIndex = 0;
+		int32 LowestF = FScore.Contains(OpenSet[0]) ? FScore[OpenSet[0]] : 999999;
+
+		for (int32 i = 1; i < OpenSet.Num(); ++i)
+		{
+			int32 TestF = FScore.Contains(OpenSet[i]) ? FScore[OpenSet[i]] : 999999;
+			if (TestF < LowestF)
+			{
+				LowestF = TestF;
+				BestIndex = i;
+			}
+		}
+
+		ATile* Current = OpenSet[BestIndex];
+
+		// 2. Se siamo arrivati al bersaglio, ricostruiamo il percorso al contrario
+		if (Current == InTargetTile)
+		{
+			ATile* Trace = Current;
+			while (Trace != InStartTile)
+			{
+				FinalPath.Insert(Trace, 0);
+				Trace = CameFromMap[Trace];
+			}
+			return FinalPath;
+		}
+
+		// 3. Spostiamo la cella corrente tra quelle già analizzate
+		OpenSet.RemoveAt(BestIndex);
+		ClosedSet.Add(Current);
+
+		// 4. Analizziamo i vicini
+		for (FIntPoint Dir : Directions)
+		{
+			FIntPoint NeighborCoord = Current->GetGridPosition() + Dir;
+			if (ATile** FoundTilePtr = TileMap.Find(NeighborCoord))
+			{
+				ATile* Neighbor = *FoundTilePtr;
+
+				// Ignora ostacoli e celle già chiuse
+				if (!Neighbor->bIsWalkable || Neighbor->Status == ETileStatus::OBSTACLE || ClosedSet.Contains(Neighbor))
+					continue;
+
+				// Ignora i blocchi occupati da altre unità (Tranne se è il bersaglio stesso!)
+				if (Neighbor->UnitOnTile != nullptr && Neighbor != InTargetTile)
+					continue;
+
+				// Calcolo costo del dislivello (La tua regola dell'Elevation!)
+				int32 StepCost = (Neighbor->Elevation > Current->Elevation) ? 2 : 1;
+				int32 TentativeG = GScore[Current] + StepCost;
+
+				if (!OpenSet.Contains(Neighbor))
+				{
+					OpenSet.Add(Neighbor);
+				}
+				else if (TentativeG >= (GScore.Contains(Neighbor) ? GScore[Neighbor] : 999999))
+				{
+					continue; // Abbiamo trovato una strada peggiore, ignoriamola
+				}
+
+				// Se arriviamo qui, abbiamo trovato la strada migliore per questo vicino!
+				CameFromMap.Add(Neighbor, Current);
+				GScore.Add(Neighbor, TentativeG);
+
+				int32 HScore = FMath::Abs(Neighbor->GetGridPosition().X - InTargetTile->GetGridPosition().X) +
+					FMath::Abs(Neighbor->GetGridPosition().Y - InTargetTile->GetGridPosition().Y);
+
+				FScore.Add(Neighbor, TentativeG + HScore);
+			}
+		}
+	}
+	return FinalPath;
 }

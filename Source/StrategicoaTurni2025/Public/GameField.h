@@ -97,11 +97,11 @@ public:
 	// Cambiamo AActor in ATile per sicurezza di tipo
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Settings")
 	TSubclassOf<class ATile> TileClass;
-
+	/*
 	// Variabili per il Pathfinding (A*)
 	UPROPERTY(BlueprintReadWrite, Category = "Pathfinding")
 	class ATile* SelectedUnitTile;
-
+	*/
 	UPROPERTY(BlueprintReadWrite, Category = "Pathfinding")
 	class ATile* TargetTile;
 
@@ -140,6 +140,11 @@ public:
 	// Spegne le celle rosse
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	void ClearAttackableTiles();
+
+	// --- NUOVO: ALGORITMO A* ---
+	// Restituisce la lista di celle che compongono il percorso ottimale verso un bersaglio
+	UFUNCTION(BlueprintCallable, Category = "AI Pathfinding")
+	TArray<class ATile*> FindPathAStar(class ATile* StartTile, class ATile* InTargetTile);
 
 private:
 	// La funzione "Secchiello" che controlla se le celle sono tutte collegate

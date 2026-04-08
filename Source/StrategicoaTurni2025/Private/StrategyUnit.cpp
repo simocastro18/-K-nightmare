@@ -185,7 +185,7 @@ void AStrategyUnit::Tick(float DeltaTime)
 
 void AStrategyUnit::ExecuteAITurn()
 {
-	UE_LOG(LogTemp, Warning, TEXT("IA: %s sta pensando..."), *UnitLogID);
+	UE_LOG(LogTemp, Warning, TEXT("IA: %s sta pensando col nuovo Algoritmo A*..."), *UnitLogID);
 
 	if (!IsValid(GameFieldRef))
 	{
@@ -195,7 +195,7 @@ void AStrategyUnit::ExecuteAITurn()
 		return;
 	}
 
-	// 1. TROVA IL BERSAGLIO PIU' VICINO
+	// 1. TROVA IL BERSAGLIO PIU' VICINO (Il Player!)
 	AStrategyUnit* ClosestTarget = nullptr;
 	float MinDist = 999999.0f;
 
@@ -216,32 +216,44 @@ void AStrategyUnit::ExecuteAITurn()
 		}
 	}
 
-	// Se non ci sono bersagli vivi, passa il turno
 	if (!ClosestTarget)
 	{
-		bHasMovedThisTurn = true;
-		bHasAttacked = true;
-		bIsTurnFinished = true;
-
+		bHasMovedThisTurn = true; bHasAttacked = true; bIsTurnFinished = true;
 		AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 		if (GM) GM->ProcessAITurn();
 		return;
 	}
 
-	// 2. DOVE POSSO MUOVERMI? (Questo accenderà le celle azzurre per 1.5 secondi)
-	GameFieldRef->HighlightReachableTiles(this);
+	// 2. MAGIA A*: Trova la linea retta più intelligente verso il nemico
+	TArray<ATile*> AStarPath = GameFieldRef->FindPathAStar(CurrentTile, ClosestTarget->CurrentTile);
 
-	// 3. SCEGLIE LA CELLA MIGLIORE (Più vicina al bersaglio)
+	// 3. CAMMINIAMO LUNGO IL PERCORSO FINCHÈ ABBIAMO MOVIMENTO
 	AIBestTargetTile = CurrentTile;
-	float BestDistToTarget = FVector::Dist(CurrentTile->GetActorLocation(), ClosestTarget->GetActorLocation());
+	int32 AccumulatedCost = 0;
 
-	for (ATile* Tile : GameFieldRef->HighlightedTiles)
+	GameFieldRef->ClearHighlightedTiles(); // Pulisce le luci precedenti
+
+	for (ATile* StepTile : AStarPath)
 	{
-		float Dist = FVector::Dist(Tile->GetActorLocation(), ClosestTarget->GetActorLocation());
-		if (Dist < BestDistToTarget)
+		// Se la cella è quella in cui sta il bersaglio, fermati (non possiamo calpestarlo!)
+		if (StepTile == ClosestTarget->CurrentTile) break;
+
+		int32 StepCost = (StepTile->Elevation > AIBestTargetTile->Elevation) ? 2 : 1;
+
+		// Possiamo permetterci questo passo? E la cella è vuota?
+		if (AccumulatedCost + StepCost <= MovementRange && StepTile->UnitOnTile == nullptr)
 		{
-			BestDistToTarget = Dist;
-			AIBestTargetTile = Tile;
+			AccumulatedCost += StepCost;
+			AIBestTargetTile = StepTile;
+
+			// Accende la luce azzurra per far vedere al giocatore cosa sta per fare l'IA
+			StepTile->OnSelectionChanged(true);
+			GameFieldRef->HighlightedTiles.Add(StepTile);
+		}
+		else
+		{
+			// Finiti i punti movimento o bloccati!
+			break;
 		}
 	}
 
