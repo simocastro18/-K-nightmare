@@ -57,39 +57,18 @@ void AStrategyGameMode::RestartGame()
 
 void AStrategyGameMode::StartGameWithConfig(FGameConfig Config)
 {
-	bIsGameOver = false; // Assicuriamoci che il Kill Switch sia spento all'avvio!
-
 	if (MapGenerator)
 	{
-		// 1. Usiamo i dati della valigetta!
 		MapGenerator->NoiseScale = Config.NoiseScale;
 		MapGenerator->GridSizeX = Config.GridSizeX;
 		MapGenerator->GridSizeY = Config.GridSizeY;
+
 		MapGenerator->GenerateGridData();
 		MapGenerator->SpawnInitialEntities();
-
-		// 2. Prepariamo il Mouse e l'Input direttamente in C++
-		APlayerController* PC = GetWorld()->GetFirstPlayerController();
-		if (PC)
-		{
-			FInputModeGameAndUI InputMode;
-			PC->SetInputMode(InputMode);
-			PC->bShowMouseCursor = true;
-		}
-
-		// 3. LANCIO DELLA MONETA (Random 50/50)
-		if (FMath::RandBool())
-		{
-			CurrentTurnState = ETurnState::PlayerTurn;
-			UE_LOG(LogTemp, Warning, TEXT("=== LANCIO MONETA: Vince il GIOCATORE! ==="));
-		}
-		else
-		{
-			CurrentTurnState = ETurnState::AITurn;
-			UE_LOG(LogTemp, Warning, TEXT("=== LANCIO MONETA: Vince l'IA! ==="));
-			GetWorldTimerManager().SetTimerForNextTick(this, &AStrategyGameMode::ProcessAITurn);
-		}
 	}
+
+	// IL FIX FONDAMENTALE: Niente moneta qui! Mettiamo il gioco in pausa per lo schieramento
+	CurrentTurnState = ETurnState::Deployment;
 }
 
 void AStrategyGameMode::CheckRemainingMoves()
@@ -275,5 +254,29 @@ void AStrategyGameMode::EvaluateTowers()
 		{
 			AIDominanceTurns = 0; // Azzera solo se è il SUO turno e non ha le torri
 		}
+	}
+}
+
+void AStrategyGameMode::StartFirstTurn()
+{
+	// LANCIO DELLA MONETA (Random 50/50)
+	if (FMath::RandBool())
+	{
+		CurrentTurnState = ETurnState::PlayerTurn;
+
+		// Stampa a schermo un messaggio Verde per il Giocatore
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Green, TEXT("LANCIO MONETA: Testa! Inizia il GIOCATORE!"));
+		UE_LOG(LogTemp, Warning, TEXT("=== LANCIO MONETA: Vince il GIOCATORE! ==="));
+	}
+	else
+	{
+		CurrentTurnState = ETurnState::AITurn;
+
+		// Stampa a schermo un messaggio Rosso per l'IA
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Red, TEXT("LANCIO MONETA: Croce! Inizia l'IA!"));
+		UE_LOG(LogTemp, Warning, TEXT("=== LANCIO MONETA: Vince l'IA! ==="));
+
+		// Fai partire il turno dell'IA con un piccolo ritardo
+		GetWorldTimerManager().SetTimerForNextTick(this, &AStrategyGameMode::ProcessAITurn);
 	}
 }

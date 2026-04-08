@@ -24,8 +24,9 @@ struct FGameConfig
 UENUM(BlueprintType)
 enum class ETurnState : uint8
 {
-	PlayerTurn  UMETA(DisplayName = "Turno Giocatore"),
-	AITurn      UMETA(DisplayName = "Turno AI")
+	Deployment    UMETA(DisplayName = "Fase di Schieramento"), // <--- DEVE ESSERCI QUESTO
+	PlayerTurn    UMETA(DisplayName = "Turno Giocatore"),
+	AITurn        UMETA(DisplayName = "Turno AI")
 };
 
 UCLASS()
@@ -61,6 +62,10 @@ public:
 	ETurnState GetCurrentTurnState() const { return CurrentTurnState; }
 
 	void CheckRemainingMoves();
+
+	// Lancia la moneta e avvia il primo turno ufficiale
+	UFUNCTION(BlueprintCallable, Category = "Game Flow")
+	void StartFirstTurn();
 
 	// Valuta la macchina a stati delle torri
 	void EvaluateTowers();

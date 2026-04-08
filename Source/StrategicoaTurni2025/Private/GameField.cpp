@@ -164,9 +164,11 @@ void AGameField::SpawnInitialEntities()
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
+	// =========================================================
 	// FASE 1: PIAZZAMENTO TORRI
+	// =========================================================
 	auto SpawnTowerAtBestLocation = [&](FIntPoint TargetCoord) {
-		ATile* BestTile = nullptr;
+		ATile* BestTile = nullptr; // <--- Era questa la riga che probabilmente è sparita!
 		float MinDistance = 999999.0f;
 
 		for (auto& Elem : TileMap)
@@ -195,7 +197,6 @@ void AGameField::SpawnInitialEntities()
 			{
 				BestTile->SetTileStatus(-1, ETileStatus::OBSTACLE); // Ostacolo
 
-				// AGGIUNTA: Diciamo alla torre dove si trova esattamente!
 				AStrategyTower* StratTower = Cast<AStrategyTower>(NewTower);
 				if (StratTower)
 				{
@@ -203,13 +204,15 @@ void AGameField::SpawnInitialEntities()
 				}
 			}
 		}
-		};
+		}; // <-- Fine Lambda Torri
 
 	SpawnTowerAtBestLocation(FIntPoint(12, 12));
 	SpawnTowerAtBestLocation(FIntPoint(12, 5));
 	SpawnTowerAtBestLocation(FIntPoint(12, 19));
 
-	// FASE 2: PIAZZAMENTO UNITA' 
+	// =========================================================
+	// FASE 2: PIAZZAMENTO UNITA' (ALTO E BASSO SULL'ASSE X)
+	// =========================================================
 	TArray<ATile*> PlayerZone;
 	TArray<ATile*> AIZone;
 
@@ -218,65 +221,67 @@ void AGameField::SpawnInitialEntities()
 		ATile* T = Elem.Value;
 		if (T && T->IsValidLowLevel() && T->bIsWalkable && T->Status == ETileStatus::EMPTY)
 		{
-			if (T->TileGridPosition.X <= 2)
+			// INVERSIONE: X piccola (<= 2) è la parte BASSA visiva (Zona Giocatore)
+			if (T->GetGridPosition().X <= 2)
 			{
 				PlayerZone.Add(T);
 			}
-			else if (T->TileGridPosition.X >= GridSizeX - 3)
+			// X grande è la parte ALTA visiva (Zona AI)
+			else if (T->GetGridPosition().X >= GridSizeX - 3)
 			{
 				AIZone.Add(T);
 			}
 		}
 	}
 
-// Funzione Lambda aggiornata per assegnare Team, LogID e Yaw per la rotazione!
-auto SpawnUnitInZone = [&](TSubclassOf<AActor> LClass, TArray<ATile*>& Zone, ETeam AssignedTeam, FString UnitLogID, float SpawnYaw) {
-	if (!LClass || Zone.Num() == 0) return;
+	// [ ... MANTIENI LA TUA LAMBDA FASE 3 QUI IN MEZZO ... ]
 
-	int32 Rnd = FMath::RandRange(0, Zone.Num() - 1);
-	ATile* T = Zone[Rnd];
+	// =========================================================
+	// FASE 3: SPAWN 
+	// (Mantengo lo spawn automatico per questo test, lo toglieremo quando facciamo la UI!)
+	// =========================================================
+	auto SpawnUnitInZone = [&](TSubclassOf<AActor> LClass, TArray<ATile*>& Zone, ETeam AssignedTeam, FString UnitLogID, float SpawnYaw) {
+		if (!LClass || Zone.Num() == 0) return;
 
-	// Calcoliamo la posizione in altezza
-	FVector Loc = T->GetActorLocation() + FVector(0, 0, 100);
+		int32 Rnd = FMath::RandRange(0, Zone.Num() - 1);
+		ATile* T = Zone[Rnd];
 
-	FVector SpawnScale(0.5f, 0.5f, 0.5f);
-	FTransform SpawnTransform(FRotator(0.0f, SpawnYaw, 0.0f), Loc, SpawnScale);
+		FVector Loc = T->GetActorLocation() + FVector(0, 0, 100);
+		FVector SpawnScale(0.5f, 0.5f, 0.5f);
+		FTransform SpawnTransform(FRotator(0.0f, SpawnYaw, 0.0f), Loc, SpawnScale);
 
-	// 2. SPAWN RITARDATO
-	AActor* NewUnit = GetWorld()->SpawnActorDeferred<AActor>(LClass, SpawnTransform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-	if (NewUnit)
-	{
-		T->SetTileStatus(-1, ETileStatus::OCCUPIED);
-		T->SetUnitOnTile(NewUnit);
-
-		AStrategyUnit* StrategyUnit = Cast<AStrategyUnit>(NewUnit);
-		if (StrategyUnit)
+		AActor* NewUnit = GetWorld()->SpawnActorDeferred<AActor>(LClass, SpawnTransform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (NewUnit)
 		{
-			// Settiamo solo il riferimento alla mappa prima di finire lo spawn
-			StrategyUnit->GameFieldRef = this;
+			T->SetTileStatus(-1, ETileStatus::OCCUPIED);
+			T->SetUnitOnTile(NewUnit);
+
+			AStrategyUnit* StrategyUnit = Cast<AStrategyUnit>(NewUnit);
+			if (StrategyUnit)
+			{
+				StrategyUnit->GameFieldRef = this;
+			}
+
+			UGameplayStatics::FinishSpawningActor(NewUnit, SpawnTransform);
+
+			if (StrategyUnit)
+			{
+				StrategyUnit->InitializeUnit(UnitLogID, AssignedTeam, SpawnYaw, T);
+			}
+
+			Zone.RemoveAt(Rnd);
 		}
+		}; // <-- Fine Lambda Unità
 
-		// 3. COMPLETAMO LO SPAWN: Qui Unreal crea fisicamente il modello 3D e la barra della vita!
-		UGameplayStatics::FinishSpawningActor(NewUnit, SpawnTransform);
+	// --- SCHIERAMENTO PLAYER ---
+	// Rotazione antioraria: Yaw = -90.0f
+	//SpawnUnitInZone(BrawlerClass, PlayerZone, ETeam::Player, TEXT("Brawler_P"), -90.0f);
+	//SpawnUnitInZone(SniperClass, PlayerZone, ETeam::Player, TEXT("Sniper_P"), -90.0f);
 
-		// 4. ORA CHE ESISTE TUTTO, LO INIZIALIZZIAMO (La HealthBar ora esiste e si colorerà!)
-		if (StrategyUnit)
-		{
-			StrategyUnit->InitializeUnit(UnitLogID, AssignedTeam, SpawnYaw, T);
-		}
-
-		Zone.RemoveAt(Rnd);
-	}
-	}; // <-- Qui finisce la Lambda
-
-// --- SCHIERAMENTO PLAYER (Guarda in alto, Yaw = 0.0f) ---
-// --- SCHIERAMENTO PLAYER ---
-SpawnUnitInZone(BrawlerClass, PlayerZone, ETeam::Player, TEXT("Brawler_P"), -90.0f);
-SpawnUnitInZone(SniperClass, PlayerZone, ETeam::Player, TEXT("Sniper_P"), -90.0f);
-
-// --- SCHIERAMENTO AI ---
-SpawnUnitInZone(BrawlerClass, AIZone, ETeam::AI, TEXT("Brawler_AI"), 90.0f); // o 270.0f
-SpawnUnitInZone(SniperClass, AIZone, ETeam::AI, TEXT("Sniper_AI"), 90.0f);
+	// --- SCHIERAMENTO AI ---
+	// Rotazione opposta: Yaw = 90.0f
+	SpawnUnitInZone(BrawlerClass, AIZone, ETeam::AI, TEXT("Brawler_AI"), 90.0f);
+	SpawnUnitInZone(SniperClass, AIZone, ETeam::AI, TEXT("Sniper_AI"), 90.0f);
 }
 
 void AGameField::ClearHighlightedTiles()
@@ -590,4 +595,20 @@ TArray<ATile*> AGameField::FindPathAStar(ATile* InStartTile, ATile* InTargetTile
 		}
 	}
 	return FinalPath;
+}
+
+void AGameField::HighlightDeploymentZone()
+{
+	ClearHighlightedTiles(); // Per sicurezza spegniamo tutto prima
+
+	for (auto& Elem : TileMap)
+	{
+		ATile* T = Elem.Value;
+		// Controlliamo che la cella sia valida, camminabile, vuota e... nella TUA ZONA (X <= 2)
+		if (T && T->IsValidLowLevel() && T->bIsWalkable && T->Status == ETileStatus::EMPTY && T->GetGridPosition().X <= 2)
+		{
+			T->OnSelectionChanged(true); // Accende la cella di azzurro
+			HighlightedTiles.Add(T);
+		}
+	}
 }

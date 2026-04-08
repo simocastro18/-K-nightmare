@@ -127,6 +127,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Pathfinding")
 	void ClearHighlightedTiles();
 
+	// Illumina la zona sicura per piazzare le truppe
+	UFUNCTION(BlueprintCallable, Category = "Deployment")
+	void HighlightDeploymentZone();
+
 	// --- SISTEMA DI ATTACCO ---
 
 	// Array per memorizzare le celle rosse attualmente illuminate

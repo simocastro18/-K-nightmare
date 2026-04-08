@@ -33,7 +33,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Grid Logic")
 	void ExecuteClick();
 
-public:
 	// Il nostro Contesto di Mapping (L'interruttore generale)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	class UInputMappingContext* DefaultMappingContext;
@@ -41,6 +40,11 @@ public:
 	// La nostra Azione di Click
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	class UInputAction* ClickAction;
+
+	// L'unità pronta per essere piazzata
+	UPROPERTY(BlueprintReadWrite, Category = "Deployment")
+	TSubclassOf<class AActor> ClassToSpawn;
+
 
 protected:
 	virtual void BeginPlay() override;

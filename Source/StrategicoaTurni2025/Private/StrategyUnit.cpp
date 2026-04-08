@@ -36,17 +36,6 @@ void AStrategyUnit::BeginPlay()
 	CurrentHealth = MaxHealth; // All'avvio la vita è al massimo
 }
 
-/*
-void AStrategyUnit::InitializeUnit(int32 InOwnerID, ATile* StartingTile)
-{
-	PlayerOwner = InOwnerID;
-	CurrentTile = StartingTile;
-	CurrentHealth = MaxHealth;
-	OriginalSpawnTile = StartingTile;
-	bHasActedThisTurn = false;
-}
-*/
-
 int32 AStrategyUnit::CalculateDamageToDeal()
 {
 	// Estrae un danno randomico tra il minimo e il massimo
@@ -56,30 +45,25 @@ int32 AStrategyUnit::CalculateDamageToDeal()
 void AStrategyUnit::ReceiveDamage(int32 DamageAmount)
 {
 	CurrentHealth -= DamageAmount;
-	// Assicuriamoci che la vita non vada sotto lo zero (evita bug grafici sulla barra!)
+	// Assicuriamoci che la vita non vada sotto lo zero
 	if (CurrentHealth < 0) CurrentHealth = 0;
 
-	// =====================================================================
 	// 1. AGGIORNIAMO LA BARRA DELLA VITA
 	OnHealthChanged(CurrentHealth, MaxHealth);
 
 	// 2. CALCOLIAMO LA POSIZIONE E SPAWNIAMO IL TESTO FLUTTUANTE
 	FVector DamageTextLocation = GetActorLocation() + FVector(0.0f, 0.0f, 150.0f);
 	OnShowFloatingDamage(DamageAmount, DamageTextLocation);
-	// =====================================================================
 
 	UE_LOG(LogTemp, Warning, TEXT("L'unità %s ha subito %d danni. Salute rimanente: %d"), *UnitLogID, DamageAmount, CurrentHealth);
 
 	if (CurrentHealth <= 0)
 	{
 		RespawnUnit();
-		// Rimuoviamo l'unità dalla griglia (verrà poi gestito il respawn come da PDF)
-		UE_LOG(LogTemp, Warning, TEXT("L'unità %s è stata respownata!"), *UnitLogID);
-		
+		UE_LOG(LogTemp, Warning, TEXT("L'unità %s è stata respawnata!"), *UnitLogID);
 	}
 }
 
-// 2. LA FUNZIONE DI PARTENZA
 void AStrategyUnit::StartMoving(TArray<FVector> NewPath)
 {
 	if (NewPath.Num() > 0)
@@ -90,7 +74,6 @@ void AStrategyUnit::StartMoving(TArray<FVector> NewPath)
 	}
 }
 
-// 3. LA MAGIA DELLO SCIVOLAMENTO (TICK)
 void AStrategyUnit::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -98,19 +81,15 @@ void AStrategyUnit::Tick(float DeltaTime)
 	if (bIsMoving && PathToFollow.IsValidIndex(CurrentPathIndex))
 	{
 		FVector TargetLocation = PathToFollow[CurrentPathIndex];
-		TargetLocation.Z += 50.0f; // Il tuo offset per non sprofondare nella cella
+		TargetLocation.Z += 50.0f; // Offset per non sprofondare nella cella
 
-		// FMath::VInterpConstantTo crea lo scivolamento fluido e costante verso il target
 		FVector NewLocation = FMath::VInterpConstantTo(GetActorLocation(), TargetLocation, DeltaTime, MoveSpeed);
 		SetActorLocation(NewLocation);
 
-		// Controlliamo se siamo arrivati vicinissimi al punto bersaglio (distanza minore di 10)
 		if (FVector::Dist(GetActorLocation(), TargetLocation) < 10.0f)
 		{
-			// Snappiamo esattamente al centro per precisione
-			SetActorLocation(TargetLocation); 
-			
-			// Passiamo alla prossima curva del percorso
+			SetActorLocation(TargetLocation);
+
 			CurrentPathIndex++;
 
 			if (CurrentPathIndex >= PathToFollow.Num())
@@ -124,7 +103,6 @@ void AStrategyUnit::Tick(float DeltaTime)
 				{
 					GameFieldRef->HighlightAttackableTiles(this);
 
-					// SE SONO UN GIOCATORE:
 					if (this->UnitTeam == ETeam::Player)
 					{
 						if (GameFieldRef->AttackableTiles.Num() == 0)
@@ -136,12 +114,10 @@ void AStrategyUnit::Tick(float DeltaTime)
 						AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 						if (GM) GM->CheckRemainingMoves();
 					}
-					// SE SONO L'INTELLIGENZA ARTIFICIALE: (AUTO-ATTACCO)
 					else
 					{
 						bool bAttacked = false;
 
-						// Cerca tra i bersagli rossi
 						for (ATile* TargetTile : GameFieldRef->AttackableTiles)
 						{
 							if (IsValid(TargetTile->UnitOnTile))
@@ -149,10 +125,7 @@ void AStrategyUnit::Tick(float DeltaTime)
 								AStrategyUnit* TargetUnit = Cast<AStrategyUnit>(TargetTile->UnitOnTile);
 								if (TargetUnit && TargetUnit->UnitTeam == ETeam::Player)
 								{
-									// 1. Chiamiamo la nuova funzione centralizzata (fa tutto lei: Danni, Contrattacchi e Log!)
 									this->AttackTarget(TargetUnit);
-
-									// 2. Segniamo che ha attaccato e fermiamo il ciclo
 									bAttacked = true;
 									break;
 								}
@@ -168,11 +141,9 @@ void AStrategyUnit::Tick(float DeltaTime)
 						this->bIsTurnFinished = true;
 						GameFieldRef->ClearAttackableTiles();
 
-						// Passa la palla al prossimo nemico
 						AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 						if (GM)
 						{
-							// Mettiamo un micro-ritardo di 1 secondo prima che parta il prossimo nemico per non fare tutto in 1 millisecondo
 							FTimerHandle WaitHandle;
 							GetWorld()->GetTimerManager().SetTimer(WaitHandle, GM, &AStrategyGameMode::ProcessAITurn, 1.0f, false);
 						}
@@ -195,7 +166,6 @@ void AStrategyUnit::ExecuteAITurn()
 		return;
 	}
 
-	// 1. TROVA IL BERSAGLIO PIU' VICINO (Il Player!)
 	AStrategyUnit* ClosestTarget = nullptr;
 	float MinDist = 999999.0f;
 
@@ -224,61 +194,49 @@ void AStrategyUnit::ExecuteAITurn()
 		return;
 	}
 
-	// 2. MAGIA A*: Trova la linea retta più intelligente verso il nemico
 	TArray<ATile*> AStarPath = GameFieldRef->FindPathAStar(CurrentTile, ClosestTarget->CurrentTile);
 
-	// 3. CAMMINIAMO LUNGO IL PERCORSO FINCHÈ ABBIAMO MOVIMENTO
 	AIBestTargetTile = CurrentTile;
 	int32 AccumulatedCost = 0;
 
-	GameFieldRef->ClearHighlightedTiles(); // Pulisce le luci precedenti
+	GameFieldRef->ClearHighlightedTiles();
 
 	for (ATile* StepTile : AStarPath)
 	{
-		// Se la cella è quella in cui sta il bersaglio, fermati (non possiamo calpestarlo!)
 		if (StepTile == ClosestTarget->CurrentTile) break;
 
 		int32 StepCost = (StepTile->Elevation > AIBestTargetTile->Elevation) ? 2 : 1;
 
-		// Possiamo permetterci questo passo? E la cella è vuota?
 		if (AccumulatedCost + StepCost <= MovementRange && StepTile->UnitOnTile == nullptr)
 		{
 			AccumulatedCost += StepCost;
 			AIBestTargetTile = StepTile;
 
-			// Accende la luce azzurra per far vedere al giocatore cosa sta per fare l'IA
 			StepTile->OnSelectionChanged(true);
 			GameFieldRef->HighlightedTiles.Add(StepTile);
 		}
 		else
 		{
-			// Finiti i punti movimento o bloccati!
 			break;
 		}
 	}
 
-	// 4. PAUSA AD EFFETTO! Lasciamo il percorso azzurro visibile per 1.5 secondi
 	GetWorld()->GetTimerManager().SetTimer(AIThinkTimerHandle, this, &AStrategyUnit::ExecuteAIMovement, 1.5f, false);
 }
 
-// 5. DOPO LA PAUSA, L'IA SI MUOVE
 void AStrategyUnit::ExecuteAIMovement()
 {
 	if (!IsValid(GameFieldRef)) return;
 
-	// Spengo le luci azzurre
 	GameFieldRef->ClearHighlightedTiles();
 
-	// Muoviti!
 	if (AIBestTargetTile != CurrentTile)
 	{
-		// Libero la vecchia
 		for (auto& Pair : GameFieldRef->TileMap)
 		{
 			if (Pair.Value->UnitOnTile == this) { Pair.Value->UnitOnTile = nullptr; break; }
 		}
 
-		// Occupo la nuova
 		AIBestTargetTile->UnitOnTile = this;
 		CurrentTile = AIBestTargetTile;
 
@@ -288,9 +246,7 @@ void AStrategyUnit::ExecuteAIMovement()
 	}
 	else
 	{
-		// Inganno il Tick per attaccare da fermo
 		bHasMovedThisTurn = true;
-
 		PathToFollow.Empty();
 		PathToFollow.Add(GetActorLocation());
 		CurrentPathIndex = 0;
@@ -302,30 +258,22 @@ void AStrategyUnit::RespawnUnit()
 {
 	UE_LOG(LogTemp, Warning, TEXT("L'unita' %s e' stata sconfitta e torna alla base!"), *UnitLogID);
 
-	// 1. Libera la cella in cui è "morta"
 	if (CurrentTile && CurrentTile->UnitOnTile == this)
 	{
 		CurrentTile->UnitOnTile = nullptr;
 	}
 
-	// 2. Ripristina i punti vita al massimo
 	CurrentHealth = MaxHealth;
-	// Recharge healtbar
 	OnHealthChanged(CurrentHealth, MaxHealth);
 
-	// 3. Torna alla cella di origine
 	if (OriginalSpawnTile)
 	{
-		// Nel caso (raro) ci sia qualcuno sulla cella di spawn, lo ignoriamo o lo sovrascriviamo
-		// Le specifiche dicono di tornare alla posizione iniziale 
 		CurrentTile = OriginalSpawnTile;
 		CurrentTile->UnitOnTile = this;
 
-		// 4. Sposta fisicamente il modello 3D alla base
 		FVector NewLocation = CurrentTile->GetActorLocation() + FVector(0, 0, 100);
 		SetActorLocation(NewLocation);
 
-		// 5. Interrompe eventuali movimenti o azioni in corso
 		bIsMoving = false;
 		PathToFollow.Empty();
 	}
@@ -336,27 +284,19 @@ void AStrategyUnit::InitializeUnit(const FString& InUnitLogID, ETeam InUnitTeam,
 	this->UnitLogID = InUnitLogID;
 	this->UnitTeam = InUnitTeam;
 
-	// 1. Impostiamo la cella di partenza e i dati di base
 	this->CurrentTile = StartingTile;
 	this->OriginalSpawnTile = StartingTile;
 	this->CurrentHealth = MaxHealth;
 	this->bHasActedThisTurn = false;
 
-	// Nel tuo codice originale usavi PlayerOwner (0 per Player, 1 per AI), lo impostiamo per sicurezza
 	this->PlayerOwner = (InUnitTeam == ETeam::Player) ? 0 : 1;
 
-	// 2. Applichiamo la rotazione (Yaw) per far guardare la pedina nella direzione giusta.
 	SetActorRotation(FRotator(0.0f, InInitialYaw, 0.0f));
 
-	
-
-	// --- LOGICA MATERIALI IN C++ (PULITA E UNIFICATA) ---
-	
 	if (UnitMesh)
 	{
 		UMaterialInterface* MatToUse = nullptr;
 
-		// Scegliamo il materiale in base al team con un classico IF
 		if (UnitTeam == ETeam::Player)
 		{
 			MatToUse = PlayerMaterial;
@@ -366,7 +306,6 @@ void AStrategyUnit::InitializeUnit(const FString& InUnitLogID, ETeam InUnitTeam,
 			MatToUse = AIMaterial;
 		}
 
-		// Se abbiamo trovato un materiale valido, lo applichiamo a tutti gli slot
 		if (MatToUse != nullptr)
 		{
 			int32 NumMaterials = UnitMesh->GetNumMaterials();
@@ -376,14 +315,47 @@ void AStrategyUnit::InitializeUnit(const FString& InUnitLogID, ETeam InUnitTeam,
 			}
 		}
 	}
-	// 3. Inizializziamo l'interfaccia (Barra della vita e colori)
-	//this->SetupHealthBarUI();
 
-	// 1. Diciamo al Blueprint di colorare la barra
 	OnSetupHealthBar(UnitTeam);
-
-	// 2. Aggiorniamo la barra al valore massimo appena nati
 	OnHealthChanged(CurrentHealth, MaxHealth);
-	
 }
 
+// =========================================================
+// ECCO LA FUNZIONE CHE MANCAVA!
+// =========================================================
+void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
+{
+	if (!IsValid(TargetUnit) || !IsValid(this->CurrentTile) || !IsValid(TargetUnit->CurrentTile)) return;
+
+	// 1. Calcola e infligge il danno base
+	int32 Damage = CalculateDamageToDeal();
+	TargetUnit->ReceiveDamage(Damage);
+
+	// Log a schermo dell'attacco principale (Rosso)
+	if (GEngine) {
+		FString AttackerName = (this->UnitTeam == ETeam::Player) ? TEXT("Giocatore") : TEXT("IA");
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("%s: %s infligge %d danni a %s!"), *AttackerName, *this->UnitLogID, Damage, *TargetUnit->UnitLogID));
+	}
+
+	// 2. REGOLE DEL CONTRATTACCO 
+	if (this->AttackType == EAttackType::RANGED)
+	{
+		int32 DistX = FMath::Abs(this->CurrentTile->GetGridPosition().X - TargetUnit->CurrentTile->GetGridPosition().X);
+		int32 DistY = FMath::Abs(this->CurrentTile->GetGridPosition().Y - TargetUnit->CurrentTile->GetGridPosition().Y);
+		int32 Distance = DistX + DistY;
+
+		bool bTargetIsSniper = (TargetUnit->AttackType == EAttackType::RANGED);
+		bool bTargetIsBrawlerAtRange1 = (TargetUnit->AttackType == EAttackType::MELEE && Distance == 1);
+
+		if (bTargetIsSniper || bTargetIsBrawlerAtRange1)
+		{
+			int32 CounterDamage = FMath::RandRange(1, 3);
+			this->ReceiveDamage(CounterDamage);
+
+			// Log a schermo del contrattacco (Arancione)
+			if (GEngine) {
+				GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Orange, FString::Printf(TEXT("CONTRATTACCO! %s subisce %d danni di riflesso!"), *this->UnitLogID, CounterDamage));
+			}
+		}
+	}
+}
