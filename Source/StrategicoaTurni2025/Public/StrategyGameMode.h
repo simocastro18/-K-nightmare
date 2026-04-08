@@ -6,6 +6,21 @@
 #include "StrategyUnit.h"
 #include "StrategyGameMode.generated.h"
 
+USTRUCT(BlueprintType)
+struct FGameConfig
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config")
+	float NoiseScale = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config")
+	int32 GridSizeX = 25;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config")
+	int32 GridSizeY = 25;
+};
+
 UENUM(BlueprintType)
 enum class ETurnState : uint8
 {
@@ -19,8 +34,23 @@ class STRATEGICOATURNI2025_API AStrategyGameMode : public AGameModeBase
 	GENERATED_BODY()
 
 public:
+
+	// Riferimenti ai Blueprint dei Widget (da assegnare nell'editor)
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<class UUserWidget> WinWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<class UUserWidget> LoseWidgetClass;
+
+	// Sostituiamo l'evento Blueprint con una funzione C++
+	void HandleGameOver(ETeam Winner);
+
+	// Funzione per il Rematch (carica il livello corrente)
 	UFUNCTION(BlueprintCallable, Category = "Game Flow")
-	void StartGameWithConfig(float NoiseScale, int32 GridSizeX, int32 GridSizeY);
+	void RestartGame();
+
+	UFUNCTION(BlueprintCallable, Category = "Game Flow")
+	void StartGameWithConfig(FGameConfig Config);
 
 	UPROPERTY(BlueprintReadOnly, Category = "Game Flow")
 	AGameField* MapGenerator;
@@ -57,10 +87,15 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
 	int32 AITowerCount = 0;
 
-	// --- UI DEL GAME OVER ---
+	// IL KILL SWITCH
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
+	bool bIsGameOver = false;
 
+	// --- UI DEL GAME OVER ---
+	/*
 	UFUNCTION(BlueprintImplementableEvent, Category = "Game Flow")
 	void OnGameOver(ETeam Winner);
+	*/
 
 protected:
 	virtual void BeginPlay() override;

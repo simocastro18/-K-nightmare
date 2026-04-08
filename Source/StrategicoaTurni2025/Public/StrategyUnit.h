@@ -150,15 +150,25 @@ public:
 	// Funzione che gestisce la "falsa morte" e il ritorno alla base
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	void RespawnUnit();
-
+	/*
 	// Aggiungi questo: creerà un nodo Evento rosso nel Blueprint!
 	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
 	void SetupHealthBarUI();
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
 	void ShowFloatingDamage(int32 DamageReceived);
+	*/
 
-	
+	// EVENTI UI DA IMPLEMENTARE IN BLUEPRINT
+	UFUNCTION(BlueprintImplementableEvent, Category = "Unit UI")
+	void OnSetupHealthBar(ETeam Team);
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Unit UI")
+	void OnHealthChanged(float NewCurrentHealth, float NewMaxHealth); // <--- NOMI CAMBIATI
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Unit UI")
+	void OnShowFloatingDamage(float DamageAmount, FVector SpawnLocation);
+
 protected:
 	virtual void BeginPlay() override;
 };
