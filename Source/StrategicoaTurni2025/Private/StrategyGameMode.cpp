@@ -267,6 +267,9 @@ void AStrategyGameMode::StartFirstTurn()
 		// Stampa a schermo un messaggio Verde per il Giocatore
 		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Green, TEXT("LANCIO MONETA: Testa! Inizia il GIOCATORE!"));
 		UE_LOG(LogTemp, Warning, TEXT("=== LANCIO MONETA: Vince il GIOCATORE! ==="));
+
+		AddGameLog(TEXT("Lancio Moneta: Inizia il Giocatore!"));
+
 	}
 	else
 	{
@@ -276,7 +279,15 @@ void AStrategyGameMode::StartFirstTurn()
 		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Red, TEXT("LANCIO MONETA: Croce! Inizia l'IA!"));
 		UE_LOG(LogTemp, Warning, TEXT("=== LANCIO MONETA: Vince l'IA! ==="));
 
+		AddGameLog(TEXT("Lancio Moneta: Inizia l'Intelligenza Artificiale!"));
+
 		// Fai partire il turno dell'IA con un piccolo ritardo
 		GetWorldTimerManager().SetTimerForNextTick(this, &AStrategyGameMode::ProcessAITurn);
 	}
+}
+
+void AStrategyGameMode::AddGameLog(const FString& Message)
+{
+	// Suona il megafono passando il messaggio!
+	OnGameLogAdded.Broadcast(Message);
 }

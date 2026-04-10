@@ -41,6 +41,28 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 	{
 		if (ClassToSpawn != nullptr && ClickedTile->Status == ETileStatus::EMPTY && ClickedTile->GetGridPosition().X <= 2)
 		{
+			// --- NUOVO: CONTROLLO DEL LIMITE UNITA' ---
+			// Leggiamo il tipo di unità dal mouse prima di farla nascere fisicamente
+			AStrategyUnit* DefaultUnit = Cast<AStrategyUnit>(ClassToSpawn->GetDefaultObject());
+			if (DefaultUnit)
+			{
+				if (DefaultUnit->AttackType == EAttackType::MELEE && bBrawlerPlaced)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Hai gia' piazzato il Brawler!"));
+					ClassToSpawn = nullptr;
+					if (GameFieldRef) GameFieldRef->ClearHighlightedTiles();
+					return;
+				}
+				if (DefaultUnit->AttackType == EAttackType::RANGED && bSniperPlaced)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Hai gia' piazzato lo Sniper!"));
+					ClassToSpawn = nullptr;
+					if (GameFieldRef) GameFieldRef->ClearHighlightedTiles();
+					return;
+				}
+			}
+
+			// --- SPAWN EFFETTIVO ---
 			FVector SpawnLoc = ClickedTile->GetActorLocation() + FVector(0, 0, 100);
 			FRotator SpawnRot(0.0f, -90.0f, 0.0f);
 
@@ -48,8 +70,7 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 
 			if (NewUnit)
 			{
-				NewUnit->SetActorScale3D(FVector(0.5f, 0.5f, 0.5f));
-
+				NewUnit->SetActorScale3D(FVector(0.5f, 0.5f, 0.5f)); // La scala rimpicciolita!
 				ClickedTile->SetTileStatus(0, ETileStatus::OCCUPIED);
 				ClickedTile->SetUnitOnTile(NewUnit);
 
@@ -58,10 +79,13 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 				{
 					StratUnit->GameFieldRef = GameFieldRef;
 					StratUnit->InitializeUnit(TEXT("Player_Unit"), ETeam::Player, -90.0f, ClickedTile);
+
+					// --- NUOVO: REGISTRA IL PIAZZAMENTO! ---
+					if (StratUnit->AttackType == EAttackType::MELEE) bBrawlerPlaced = true;
+					if (StratUnit->AttackType == EAttackType::RANGED) bSniperPlaced = true;
 				}
 
 				ClassToSpawn = nullptr;
-				// --- NUOVO: Spegne le luci dopo aver piazzato la pedina! ---
 				if (GameFieldRef) GameFieldRef->ClearHighlightedTiles();
 			}
 		}
@@ -219,6 +243,12 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 				SelectedUnit->StartMoving(Path);
 
 				SelectedUnit->bHasMovedThisTurn = true;
+
+				if (GM)
+				{
+					FString MoveMsg = FString::Printf(TEXT("MOVIMENTO: Il Giocatore sposta %s in X:%d Y:%d"), *SelectedUnit->UnitLogID, ClickedTile->GetGridPosition().X, ClickedTile->GetGridPosition().Y);
+					GM->AddGameLog(MoveMsg);
+				}
 
 				if (IsValid(GameFieldRef))
 				{

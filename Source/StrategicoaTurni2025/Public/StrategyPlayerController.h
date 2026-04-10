@@ -44,13 +44,13 @@ public:
 	// L'unità pronta per essere piazzata
 	UPROPERTY(BlueprintReadWrite, Category = "Deployment")
 	TSubclassOf<class AActor> ClassToSpawn;
-/*
+
 	UPROPERTY(BlueprintReadWrite, Category = "Deployment")
 	bool bBrawlerPlaced = false;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Deployment")
 	bool bSniperPlaced = false;
-*/
+
 protected:
 	virtual void BeginPlay() override;
 	// Funzione nativa di Unreal per legare i tasti alle funzioni

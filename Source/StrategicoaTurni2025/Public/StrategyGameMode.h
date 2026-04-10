@@ -29,6 +29,8 @@ enum class ETurnState : uint8
 	AITurn        UMETA(DisplayName = "Turno AI")
 };
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGameLogAdded, const FString&, LogMessage);
+
 UCLASS()
 class STRATEGICOATURNI2025_API AStrategyGameMode : public AGameModeBase
 {
@@ -101,6 +103,14 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Game Flow")
 	void OnGameOver(ETeam Winner);
 	*/
+
+	// Il megafono che avvisa la UI
+	UPROPERTY(BlueprintAssignable, Category = "UI Log")
+	FOnGameLogAdded OnGameLogAdded;
+
+	// La funzione che chiameremo in C++ per aggiungere un testo
+	UFUNCTION(BlueprintCallable, Category = "UI Log")
+	void AddGameLog(const FString& Message);
 
 protected:
 	virtual void BeginPlay() override;

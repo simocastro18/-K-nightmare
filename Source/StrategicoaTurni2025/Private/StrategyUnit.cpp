@@ -243,6 +243,13 @@ void AStrategyUnit::ExecuteAIMovement()
 		TArray<FVector> Path = GameFieldRef->GetPathToTile(AIBestTargetTile);
 		StartMoving(Path);
 		bHasMovedThisTurn = true;
+	
+		AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
+		if (GM)
+		{
+			FString MoveMsg = FString::Printf(TEXT("MOVIMENTO: L'IA sposta %s in X:%d Y:%d"), *this->UnitLogID, AIBestTargetTile->GetGridPosition().X, AIBestTargetTile->GetGridPosition().Y);
+			GM->AddGameLog(MoveMsg);
+		}
 	}
 	else
 	{
@@ -331,10 +338,13 @@ void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
 	int32 Damage = CalculateDamageToDeal();
 	TargetUnit->ReceiveDamage(Damage);
 
-	// Log a schermo dell'attacco principale (Rosso)
-	if (GEngine) {
+	// Log a schermo dell'attacco 
+	AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
+	if (GM)
+	{
 		FString AttackerName = (this->UnitTeam == ETeam::Player) ? TEXT("Giocatore") : TEXT("IA");
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("%s: %s infligge %d danni a %s!"), *AttackerName, *this->UnitLogID, Damage, *TargetUnit->UnitLogID));
+		FString LogMsg = FString::Printf(TEXT("%s: %s infligge %d danni a %s!"), *AttackerName, *this->UnitLogID, Damage, *TargetUnit->UnitLogID);
+		GM->AddGameLog(LogMsg);
 	}
 
 	// 2. REGOLE DEL CONTRATTACCO 
