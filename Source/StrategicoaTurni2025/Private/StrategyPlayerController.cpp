@@ -246,7 +246,12 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 
 				if (GM)
 				{
-					FString MoveMsg = FString::Printf(TEXT("MOVIMENTO: Il Giocatore sposta %s in X:%d Y:%d"), *SelectedUnit->UnitLogID, ClickedTile->GetGridPosition().X, ClickedTile->GetGridPosition().Y);
+					char StartLetter = 'A' + SelectedUnit->OriginalSpawnTile->GetGridPosition().Y; // O usa la cella precedente se la salvi
+					char EndLetter = 'A' + ClickedTile->GetGridPosition().Y;
+
+					FString UnitInitial = (SelectedUnit->AttackType == EAttackType::RANGED) ? TEXT("S") : TEXT("B");
+
+					FString MoveMsg = FString::Printf(TEXT("HP: %s %c%d -> %c%d"), *UnitInitial, StartLetter, SelectedUnit->CurrentTile->GetGridPosition().X, EndLetter, ClickedTile->GetGridPosition().X);
 					GM->AddGameLog(MoveMsg);
 				}
 

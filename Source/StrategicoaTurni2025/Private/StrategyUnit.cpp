@@ -232,22 +232,35 @@ void AStrategyUnit::ExecuteAIMovement()
 
 	if (AIBestTargetTile != CurrentTile)
 	{
+		// SALVIAMO LA CELLA DI PARTENZA PRIMA DI MUOVERCI!
+		ATile* StartingTile = CurrentTile;
+
 		for (auto& Pair : GameFieldRef->TileMap)
 		{
 			if (Pair.Value->UnitOnTile == this) { Pair.Value->UnitOnTile = nullptr; break; }
 		}
 
 		AIBestTargetTile->UnitOnTile = this;
-		CurrentTile = AIBestTargetTile;
+		CurrentTile = AIBestTargetTile; // Ora possiamo aggiornarla
 
 		TArray<FVector> Path = GameFieldRef->GetPathToTile(AIBestTargetTile);
 		StartMoving(Path);
 		bHasMovedThisTurn = true;
-	
+
+		// ==========================================
+		// LOG DI MOVIMENTO IA FORMATTATO (Requisito 9)
+		// ==========================================
 		AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
-		if (GM)
+		if (GM && StartingTile)
 		{
-			FString MoveMsg = FString::Printf(TEXT("MOVIMENTO: L'IA sposta %s in X:%d Y:%d"), *this->UnitLogID, AIBestTargetTile->GetGridPosition().X, AIBestTargetTile->GetGridPosition().Y);
+			FString UnitInitial = (this->AttackType == EAttackType::RANGED) ? TEXT("S") : TEXT("B");
+
+			char StartLetter = 'A' + StartingTile->GetGridPosition().Y;
+			char EndLetter = 'A' + AIBestTargetTile->GetGridPosition().Y;
+
+			// Formato richiesto (es. "AI: B A0 -> B2")
+			FString MoveMsg = FString::Printf(TEXT("AI: %s %c%d -> %c%d"), *UnitInitial, StartLetter, StartingTile->GetGridPosition().X, EndLetter, AIBestTargetTile->GetGridPosition().X);
+
 			GM->AddGameLog(MoveMsg);
 		}
 	}
@@ -338,13 +351,26 @@ void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
 	int32 Damage = CalculateDamageToDeal();
 	TargetUnit->ReceiveDamage(Damage);
 
-	// Log a schermo dell'attacco 
+	// ==========================================
+	// LOG DI ATTACCO FORMATTATO (Requisito 9)
+	// ==========================================
 	AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
-	if (GM)
+	if (GM && TargetUnit && TargetUnit->CurrentTile)
 	{
-		FString AttackerName = (this->UnitTeam == ETeam::Player) ? TEXT("Giocatore") : TEXT("IA");
-		FString LogMsg = FString::Printf(TEXT("%s: %s infligge %d danni a %s!"), *AttackerName, *this->UnitLogID, Damage, *TargetUnit->UnitLogID);
-		GM->AddGameLog(LogMsg);
+		// 1. Identificativo Player: "HP" per il Giocatore, "AI" per il computer
+		FString TeamID = (this->UnitTeam == ETeam::Player) ? TEXT("HP") : TEXT("AI");
+
+		// 2. Identificativo Unità: "S" per Sniper, "B" per Brawler
+		FString UnitInitial = (this->AttackType == EAttackType::RANGED) ? TEXT("S") : TEXT("B");
+
+		// 3. Calcolo della Cella Bersaglio (Lettera Y, Numero X)
+		char TargetLetter = 'A' + TargetUnit->CurrentTile->GetGridPosition().Y;
+		int32 TargetNumber = TargetUnit->CurrentTile->GetGridPosition().X;
+
+		// 4. Creazione della stringa finale esatta (es. "HP: S G8 -> 7")
+		FString AttackMsg = FString::Printf(TEXT("%s: %s %c%d -> %d"), *TeamID, *UnitInitial, TargetLetter, TargetNumber, Damage);
+
+		GM->AddGameLog(AttackMsg);
 	}
 
 	// 2. REGOLE DEL CONTRATTACCO 
