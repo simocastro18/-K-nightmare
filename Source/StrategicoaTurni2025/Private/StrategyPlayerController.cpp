@@ -48,6 +48,8 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 
 			if (NewUnit)
 			{
+				NewUnit->SetActorScale3D(FVector(0.5f, 0.5f, 0.5f));
+
 				ClickedTile->SetTileStatus(0, ETileStatus::OCCUPIED);
 				ClickedTile->SetUnitOnTile(NewUnit);
 
