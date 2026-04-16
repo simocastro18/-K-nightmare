@@ -112,6 +112,28 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "UI Log")
 	void AddGameLog(const FString& Message);
 
+	// ==========================================
+	// STATO DELLA PARTITA E VITTORIA
+	// ==========================================
+
+	UPROPERTY(BlueprintReadOnly, Category = "Game State")
+	int32 PlayerTowers = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Game State")
+	int32 AITowers = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Game State")
+	int32 CurrentTurnNumber = 1; // Iniziamo dal turno 1
+
+	// ==========================================
+	// HELPER GRIGLIA (Da X,Y a "A0")
+	// ==========================================
+	UFUNCTION(BlueprintPure, Category = "Grid Logic")
+	static FString GetCellCoordinateName(int32 X, int32 Y);
+
+	UFUNCTION(BlueprintPure, Category = "Grid Logic")
+	static FString GetGridLetter(int32 Index);
+
 protected:
 	virtual void BeginPlay() override;
 

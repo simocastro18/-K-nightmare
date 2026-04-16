@@ -99,7 +99,7 @@ void AStrategyGameMode::EndTurn()
 	EvaluateTowers();
 
 	if (bIsGameOver) return;
-	
+
 	TArray<AActor*> AllUnits;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyUnit::StaticClass(), AllUnits);
 
@@ -126,6 +126,9 @@ void AStrategyGameMode::EndTurn()
 	{
 		CurrentTurnState = ETurnState::PlayerTurn;
 		UE_LOG(LogTemp, Warning, TEXT("=== NUOVO ROUND: TURNO DEL GIOCATORE ==="));
+
+		// FIX: Il turno aumenta SOLO quando ricomincia il round completo!
+		CurrentTurnNumber++;
 	}
 }
 
@@ -214,10 +217,6 @@ void AStrategyGameMode::EvaluateTowers()
 
 	UE_LOG(LogTemp, Warning, TEXT("Punteggio Torri -> Player: %d | AI: %d"), PlayerTowerCount, AITowerCount);
 
-	// --- LA CORREZIONE È QUI SOTTO ---
-	// Valutiamo i contatori SOLO alla fine del turno della rispettiva squadra, 
-	// così non si resettano a vicenda in modo incrociato.
-
 	if (CurrentTurnState == ETurnState::PlayerTurn)
 	{
 		if (PlayerTowerCount >= 2)
@@ -227,13 +226,17 @@ void AStrategyGameMode::EvaluateTowers()
 			if (PlayerDominanceTurns >= 2)
 			{
 				UE_LOG(LogTemp, Error, TEXT("VITTORIA! Il Player ha mantenuto 2 torri per 2 turni consecutivi!"));
+
+				// NUOVO LOG
+				AddGameLog(TEXT("VITTORIA: Hai dominato le torri per 2 turni!"));
+
 				this->HandleGameOver(ETeam::Player);
 				return;
 			}
 		}
 		else
 		{
-			PlayerDominanceTurns = 0; // Azzera solo se è il SUO turno e non ha le torri
+			PlayerDominanceTurns = 0;
 		}
 	}
 	else if (CurrentTurnState == ETurnState::AITurn)
@@ -245,48 +248,88 @@ void AStrategyGameMode::EvaluateTowers()
 			if (AIDominanceTurns >= 2)
 			{
 				UE_LOG(LogTemp, Error, TEXT("SCONFITTA! L'IA ha mantenuto 2 torri per 2 turni consecutivi!"));
+
+				// NUOVO LOG
+				AddGameLog(TEXT("SCONFITTA: L'IA ha dominato le torri per 2 turni!"));
+
 				this->HandleGameOver(ETeam::AI);
 				return;
 			}
 		}
 		else
 		{
-			AIDominanceTurns = 0; // Azzera solo se è il SUO turno e non ha le torri
+			AIDominanceTurns = 0;
 		}
 	}
 }
 
 void AStrategyGameMode::StartFirstTurn()
 {
-	// LANCIO DELLA MONETA (Random 50/50)
+	// 1. RESET DI SICUREZZA: Assicuriamoci che tutte le unità siano fresche
+	TArray<AActor*> AllUnits;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyUnit::StaticClass(), AllUnits);
+
+	for (AActor* Actor : AllUnits)
+	{
+		AStrategyUnit* Unit = Cast<AStrategyUnit>(Actor);
+		if (Unit)
+		{
+			Unit->bHasMovedThisTurn = false;
+			Unit->bHasAttacked = false;
+			Unit->bIsTurnFinished = false;
+			Unit->bHasMoved = false;
+		}
+	}
+
+	// 2. SBLOCCO DEL MOUSE: Togliamo il focus dal bottone e ridiamolo al gioco
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (PC)
+	{
+		FInputModeGameAndUI InputMode;
+		PC->SetInputMode(InputMode);
+	}
+
+	// 3. LANCIO DELLA MONETA (Random 50/50)
 	if (FMath::RandBool())
 	{
 		CurrentTurnState = ETurnState::PlayerTurn;
 
-		// Stampa a schermo un messaggio Verde per il Giocatore
 		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Green, TEXT("LANCIO MONETA: Testa! Inizia il GIOCATORE!"));
 		UE_LOG(LogTemp, Warning, TEXT("=== LANCIO MONETA: Vince il GIOCATORE! ==="));
 
 		AddGameLog(TEXT("Lancio Moneta: Inizia il Giocatore!"));
-
 	}
 	else
 	{
 		CurrentTurnState = ETurnState::AITurn;
 
-		// Stampa a schermo un messaggio Rosso per l'IA
 		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Red, TEXT("LANCIO MONETA: Croce! Inizia l'IA!"));
 		UE_LOG(LogTemp, Warning, TEXT("=== LANCIO MONETA: Vince l'IA! ==="));
 
 		AddGameLog(TEXT("Lancio Moneta: Inizia l'Intelligenza Artificiale!"));
 
-		// Fai partire il turno dell'IA con un piccolo ritardo
 		GetWorldTimerManager().SetTimerForNextTick(this, &AStrategyGameMode::ProcessAITurn);
 	}
+}
+
+FString AStrategyGameMode::GetCellCoordinateName(int32 X, int32 Y)
+{
+	// Convertiamo la Y (0-24) nella lettera corrispondente (A-Y)
+	// La 'A' in codice ASCII è 65. Quindi 65 + 0 = 'A', 65 + 1 = 'B', ecc.
+	char Letter = 'A' + FMath::Clamp(Y, 0, 24);
+
+	// Formattiamo la stringa finale (es. "C4")
+	return FString::Printf(TEXT("%c%d"), Letter, X);
 }
 
 void AStrategyGameMode::AddGameLog(const FString& Message)
 {
 	// Suona il megafono passando il messaggio!
 	OnGameLogAdded.Broadcast(Message);
+}
+
+FString AStrategyGameMode::GetGridLetter(int32 Index)
+{
+	char Letter = 'A' + FMath::Clamp(Index, 0, 24);
+	return FString::Printf(TEXT("%c"), Letter);
 }
