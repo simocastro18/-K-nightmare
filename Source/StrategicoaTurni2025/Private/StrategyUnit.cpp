@@ -497,9 +497,8 @@ void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
 		char TargetLetter = 'A' + TargetUnit->CurrentTile->GetGridPosition().Y;
 		int32 TargetNumber = TargetUnit->CurrentTile->GetGridPosition().X;
 
-		// 4. Creazione della stringa finale esatta (es. "HP: S G8 -> 7")
-		FString AttackMsg = FString::Printf(TEXT("%s: %s %c%d -> %d"), *TeamID, *UnitInitial, TargetLetter, TargetNumber, Damage);
-
+		// 4. Creazione della stringa finale: forza il prefisso "ATK:"
+		FString AttackMsg = FString::Printf(TEXT("ATK: %s attacca %c%d (-%d HP)"), *UnitInitial, TargetLetter, TargetNumber, Damage);
 		GM->AddGameLog(AttackMsg);
 	}
 

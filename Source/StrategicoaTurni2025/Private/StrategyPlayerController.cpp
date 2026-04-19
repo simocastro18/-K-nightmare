@@ -74,6 +74,12 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 
 					if (StratUnit->AttackType == EAttackType::MELEE) bBrawlerPlaced = true;
 					if (StratUnit->AttackType == EAttackType::RANGED) bSniperPlaced = true;
+
+					// --- NUOVO: LOG DI SCHIERAMENTO (Ora è al sicuro dai Crash!) ---
+					FString UnitInitial = (StratUnit->AttackType == EAttackType::RANGED) ? TEXT("S") : TEXT("B");
+					char ColLetter = 'A' + ClickedTile->GetGridPosition().Y;
+					int32 RowNum = ClickedTile->GetGridPosition().X;
+					GM->AddGameLog(FString::Printf(TEXT("HP: Piazzato %s in %c%d"), *UnitInitial, ColLetter, RowNum));
 				}
 
 				ClassToSpawn = nullptr;
