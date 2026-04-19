@@ -145,10 +145,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	void ClearAttackableTiles();
 
+	// Algoritmo di Bresenham per la Line of Sight dello Sniper
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	bool HasLineOfSight(class ATile* InStartTile, class ATile* InTargetTile);
+
 	// --- NUOVO: ALGORITMO A* ---
 	// Restituisce la lista di celle che compongono il percorso ottimale verso un bersaglio
 	UFUNCTION(BlueprintCallable, Category = "AI Pathfinding")
 	TArray<class ATile*> FindPathAStar(class ATile* StartTile, class ATile* InTargetTile);
+
+	// --- NUOVO: ALGORITMO GREEDY (REQUISITO 10) ---
+	UFUNCTION(BlueprintCallable, Category = "AI Pathfinding")
+	TArray<class ATile*> FindPathGreedy(class ATile* StartTile, class ATile* InTargetTile);
+
+	UFUNCTION(BlueprintCallable, Category = "Game Logic")
+	void SpawnSingleAIUnit(int32 UnitIndex);
 
 private:
 	// La funzione "Secchiello" che controlla se le celle sono tutte collegate

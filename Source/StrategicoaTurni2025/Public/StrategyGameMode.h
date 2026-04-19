@@ -2,10 +2,22 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
-#include "GameField.h" 
-#include "StrategyUnit.h"
+#include "StrategyUnit.h" // Ci serve solo questo per l'Enum ETeam
 #include "StrategyGameMode.generated.h"
 
+// --- FORWARD DECLARATIONS (Il trucco per evitare dipendenze circolari) ---
+class AGameField;
+class UUserWidget;
+
+// --- NUOVO ENUM PER LA SCELTA DELL'ALGORITMO ---
+UENUM(BlueprintType)
+enum class EAIAlgorithm : uint8
+{
+	AStar  UMETA(DisplayName = "A*"),
+	Greedy UMETA(DisplayName = "Greedy")
+};
+
+// --- STRUTTURA CONFIGURAZIONE ---
 USTRUCT(BlueprintType)
 struct FGameConfig
 {
@@ -19,14 +31,18 @@ struct FGameConfig
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config")
 	int32 GridSizeY = 25;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config")
+	EAIAlgorithm SelectedAIAlgorithm = EAIAlgorithm::AStar;
 };
 
+// --- STATI DEL TURNO ---
 UENUM(BlueprintType)
 enum class ETurnState : uint8
 {
-	Deployment    UMETA(DisplayName = "Fase di Schieramento"), // <--- DEVE ESSERCI QUESTO
-	PlayerTurn    UMETA(DisplayName = "Turno Giocatore"),
-	AITurn        UMETA(DisplayName = "Turno AI")
+	Deployment UMETA(DisplayName = "Fase di Schieramento"),
+	PlayerTurn UMETA(DisplayName = "Turno Giocatore"),
+	AITurn     UMETA(DisplayName = "Turno AI")
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGameLogAdded, const FString&, LogMessage);
@@ -38,23 +54,21 @@ class STRATEGICOATURNI2025_API AStrategyGameMode : public AGameModeBase
 
 public:
 
-	// Riferimenti ai Blueprint dei Widget (da assegnare nell'editor)
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
-	TSubclassOf<class UUserWidget> WinWidgetClass;
+	TSubclassOf<UUserWidget> WinWidgetClass;
 
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
-	TSubclassOf<class UUserWidget> LoseWidgetClass;
+	TSubclassOf<UUserWidget> LoseWidgetClass;
 
-	// Sostituiamo l'evento Blueprint con una funzione C++
 	void HandleGameOver(ETeam Winner);
 
-	// Funzione per il Rematch (carica il livello corrente)
 	UFUNCTION(BlueprintCallable, Category = "Game Flow")
 	void RestartGame();
 
 	UFUNCTION(BlueprintCallable, Category = "Game Flow")
 	void StartGameWithConfig(FGameConfig Config);
 
+	// Usiamo il puntatore alla Forward Declaration
 	UPROPERTY(BlueprintReadOnly, Category = "Game Flow")
 	AGameField* MapGenerator;
 
@@ -65,57 +79,36 @@ public:
 
 	void CheckRemainingMoves();
 
-	// Lancia la moneta e avvia il primo turno ufficiale
 	UFUNCTION(BlueprintCallable, Category = "Game Flow")
-	void StartFirstTurn();
 
-	// Valuta la macchina a stati delle torri
 	void EvaluateTowers();
 
-	// NUOVO: La funzione che gestisce i nemici uno alla volta
 	UFUNCTION(BlueprintCallable, Category = "AI")
 	void ProcessAITurn();
 
 	// --- SISTEMA DI VITTORIA ---
-
-	// Da quanti turni consecutivi il Player ha il dominio (>= 2 torri)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
 	int32 PlayerDominanceTurns = 0;
 
-	// Da quanti turni consecutivi l'AI ha il dominio (>= 2 torri)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
 	int32 AIDominanceTurns = 0;
 
-	// Quante torri ha attualmente il Player
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
 	int32 PlayerTowerCount = 0;
 
-	// Quante torri ha attualmente l'AI
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
 	int32 AITowerCount = 0;
 
-	// IL KILL SWITCH
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
 	bool bIsGameOver = false;
 
-	// --- UI DEL GAME OVER ---
-	/*
-	UFUNCTION(BlueprintImplementableEvent, Category = "Game Flow")
-	void OnGameOver(ETeam Winner);
-	*/
-
-	// Il megafono che avvisa la UI
 	UPROPERTY(BlueprintAssignable, Category = "UI Log")
 	FOnGameLogAdded OnGameLogAdded;
 
-	// La funzione che chiameremo in C++ per aggiungere un testo
 	UFUNCTION(BlueprintCallable, Category = "UI Log")
 	void AddGameLog(const FString& Message);
 
-	// ==========================================
-	// STATO DELLA PARTITA E VITTORIA
-	// ==========================================
-
+	// --- STATO DELLA PARTITA ---
 	UPROPERTY(BlueprintReadOnly, Category = "Game State")
 	int32 PlayerTowers = 0;
 
@@ -123,16 +116,37 @@ public:
 	int32 AITowers = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Game State")
-	int32 CurrentTurnNumber = 1; // Iniziamo dal turno 1
+	int32 CurrentTurnNumber = 1;
 
-	// ==========================================
-	// HELPER GRIGLIA (Da X,Y a "A0")
-	// ==========================================
+	// --- HELPER GRIGLIA ---
 	UFUNCTION(BlueprintPure, Category = "Grid Logic")
 	static FString GetCellCoordinateName(int32 X, int32 Y);
 
 	UFUNCTION(BlueprintPure, Category = "Grid Logic")
 	static FString GetGridLetter(int32 Index);
+
+	// --- VARIABILI SCHIERAMENTO ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Deployment")
+	int32 PlayerUnitsPlaced = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Deployment")
+	int32 AIUnitsPlaced = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Deployment")
+	bool bPlayerDeploysNext = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Deployment")
+	ETeam FirstTurnWinner;
+
+	UFUNCTION(BlueprintCallable, Category = "Deployment")
+	void StartCoinFlipAndDeployment();
+
+	UFUNCTION(BlueprintCallable, Category = "Deployment")
+	void AdvanceDeployment();
+
+	// --- ALGORITMO IA GLOBALE ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
+	EAIAlgorithm ActiveAIAlgorithm = EAIAlgorithm::AStar;
 
 protected:
 	virtual void BeginPlay() override;

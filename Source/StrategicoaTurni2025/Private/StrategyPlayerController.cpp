@@ -34,43 +34,35 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 	if (!IsValid(ClickedTile)) return;
 
 	AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
+
 	// =========================================================
 	// 1. FASE DI SCHIERAMENTO (DEPLOYMENT)
 	// =========================================================
 	if (GM && GM->GetCurrentTurnState() == ETurnState::Deployment)
 	{
+		// CONTROLLO TURNO SCHIERAMENTO
+		if (!GM->bPlayerDeploysNext)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Attendi! E' il turno dell'IA di piazzare."));
+			return;
+		}
+
 		if (ClassToSpawn != nullptr && ClickedTile->Status == ETileStatus::EMPTY && ClickedTile->GetGridPosition().X <= 2)
 		{
-			// --- NUOVO: CONTROLLO DEL LIMITE UNITA' ---
-			// Leggiamo il tipo di unità dal mouse prima di farla nascere fisicamente
 			AStrategyUnit* DefaultUnit = Cast<AStrategyUnit>(ClassToSpawn->GetDefaultObject());
 			if (DefaultUnit)
 			{
-				if (DefaultUnit->AttackType == EAttackType::MELEE && bBrawlerPlaced)
-				{
-					UE_LOG(LogTemp, Warning, TEXT("Hai gia' piazzato il Brawler!"));
-					ClassToSpawn = nullptr;
-					if (GameFieldRef) GameFieldRef->ClearHighlightedTiles();
-					return;
-				}
-				if (DefaultUnit->AttackType == EAttackType::RANGED && bSniperPlaced)
-				{
-					UE_LOG(LogTemp, Warning, TEXT("Hai gia' piazzato lo Sniper!"));
-					ClassToSpawn = nullptr;
-					if (GameFieldRef) GameFieldRef->ClearHighlightedTiles();
-					return;
-				}
+				if (DefaultUnit->AttackType == EAttackType::MELEE && bBrawlerPlaced) return;
+				if (DefaultUnit->AttackType == EAttackType::RANGED && bSniperPlaced) return;
 			}
 
-			// --- SPAWN EFFETTIVO ---
 			FVector SpawnLoc = ClickedTile->GetActorLocation() + FVector(0, 0, 100);
 			FRotator SpawnRot(0.0f, -90.0f, 0.0f);
-
 			AActor* NewUnit = GetWorld()->SpawnActor<AActor>(ClassToSpawn, SpawnLoc, SpawnRot);
 
 			if (NewUnit)
 			{
-				NewUnit->SetActorScale3D(FVector(0.5f, 0.5f, 0.5f)); // La scala rimpicciolita!
+				NewUnit->SetActorScale3D(FVector(0.5f, 0.5f, 0.5f));
 				ClickedTile->SetTileStatus(0, ETileStatus::OCCUPIED);
 				ClickedTile->SetUnitOnTile(NewUnit);
 
@@ -80,17 +72,22 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 					StratUnit->GameFieldRef = GameFieldRef;
 					StratUnit->InitializeUnit(TEXT("Player_Unit"), ETeam::Player, -90.0f, ClickedTile);
 
-					// --- NUOVO: REGISTRA IL PIAZZAMENTO! ---
 					if (StratUnit->AttackType == EAttackType::MELEE) bBrawlerPlaced = true;
 					if (StratUnit->AttackType == EAttackType::RANGED) bSniperPlaced = true;
 				}
 
 				ClassToSpawn = nullptr;
 				if (GameFieldRef) GameFieldRef->ClearHighlightedTiles();
+
+				// AVANZA LO SCHIERAMENTO! Passa la palla all'IA
+				GM->PlayerUnitsPlaced++;
+				GM->bPlayerDeploysNext = false;
+				GM->AdvanceDeployment();
 			}
 		}
 		return;
 	}
+
 	// =========================================================
 	// CONTROLLO OSTACOLI (Vale per Movimento e Attacco)
 	// =========================================================
@@ -111,18 +108,35 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 		return;
 	}
 
+	// =========================================================
+	// FIX: GESTIONE DOPPIO CLICK SULLA STESSA CELLA
+	// =========================================================
 	if (CurrentSelectedTile == ClickedTile)
 	{
-		ClickedTile->OnSelectionChanged(false);
-		CurrentSelectedTile = nullptr;
-		SelectedUnit = nullptr;
-
-		if (IsValid(GameFieldRef))
+		// Controlliamo se stiamo cliccando la nostra unita' attiva per farla riposare (Wait)
+		bool bIsTryingToWait = false;
+		if (SelectedUnit && SelectedUnit == ClickedTile->UnitOnTile)
 		{
-			GameFieldRef->ClearHighlightedTiles();
-			GameFieldRef->ClearAttackableTiles();
+			if (SelectedUnit->bHasMovedThisTurn && !SelectedUnit->bHasAttacked)
+			{
+				bIsTryingToWait = true;
+			}
 		}
-		return;
+
+		// Se NON stiamo facendo Wait, allora procedi con la normale deselezione
+		if (!bIsTryingToWait)
+		{
+			ClickedTile->OnSelectionChanged(false);
+			CurrentSelectedTile = nullptr;
+			SelectedUnit = nullptr;
+
+			if (IsValid(GameFieldRef))
+			{
+				GameFieldRef->ClearHighlightedTiles();
+				GameFieldRef->ClearAttackableTiles();
+			}
+			return;
+		}
 	}
 
 	CurrentSelectedTile = ClickedTile;
@@ -174,6 +188,17 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 				return;
 			}
 
+			if (ClickedUnit && ClickedUnit->UnitTeam == ETeam::Player)
+			{
+				// --- NUOVO: IL LUCCHETTO ---
+				// Se clicchi un'unità che ha già finito il turno (ha attaccato o ha fatto "Wait"), ignora il click!
+				if (ClickedUnit->bIsTurnFinished)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Azione negata: %s ha gia' concluso il suo turno!"), *ClickedUnit->UnitLogID);
+					return; // Ferma tutto, non la seleziona!
+				}
+			}
+
 			if (ClickedUnit->bHasMovedThisTurn && ClickedUnit->bHasAttacked)
 			{
 				UE_LOG(LogTemp, Error, TEXT("DEBUG: Unita' stanca!"));
@@ -182,6 +207,23 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 
 			if (SelectedUnit == ClickedUnit)
 			{
+				// --- LOGICA: SALTA L'ATTACCO (WAIT) ---
+				// Se l'unità si è già mossa ma non ha attaccato, ri-cliccarla termina il suo turno!
+				if (SelectedUnit->bHasMovedThisTurn && !SelectedUnit->bHasAttacked)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("L'unita' %s rinuncia all'attacco e si mette in attesa."), *SelectedUnit->UnitLogID);
+					SelectedUnit->bIsTurnFinished = true;
+
+					// Aggiorniamo il Combat Log per far sapere che ha saltato l'azione
+					if (GM)
+					{
+						FString UnitInitial = (SelectedUnit->AttackType == EAttackType::RANGED) ? TEXT("S") : TEXT("B");
+						GM->AddGameLog(FString::Printf(TEXT("HP: %s Attesa (Salta Attacco)"), *UnitInitial));
+						GM->CheckRemainingMoves(); // Sblocca il flusso e passa al nemico se era l'ultima unità!
+					}
+				}
+
+				// Deseleziona l'unità (eseguito in ogni caso)
 				SelectedUnit = nullptr;
 				if (IsValid(GameFieldRef))
 				{
@@ -224,6 +266,10 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 		{
 			if (IsValid(GameFieldRef) && GameFieldRef->HighlightedTiles.Contains(ClickedTile))
 			{
+				// SALVIAMO LE COORDINATE VECCHIE PRIMA DI SOVRASCRIVERLE!
+				char StartLetter = 'A' + SelectedUnit->CurrentTile->GetGridPosition().Y;
+				int32 StartNumber = SelectedUnit->CurrentTile->GetGridPosition().X;
+
 				// Libero vecchia cella
 				for (auto& Pair : GameFieldRef->TileMap)
 				{
@@ -241,17 +287,15 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 				// Lancio Movimento!
 				TArray<FVector> Path = GameFieldRef->GetPathToTile(ClickedTile);
 				SelectedUnit->StartMoving(Path);
-
 				SelectedUnit->bHasMovedThisTurn = true;
 
 				if (GM)
 				{
-					char StartLetter = 'A' + SelectedUnit->OriginalSpawnTile->GetGridPosition().Y; // O usa la cella precedente se la salvi
 					char EndLetter = 'A' + ClickedTile->GetGridPosition().Y;
-
 					FString UnitInitial = (SelectedUnit->AttackType == EAttackType::RANGED) ? TEXT("S") : TEXT("B");
 
-					FString MoveMsg = FString::Printf(TEXT("HP: %s %c%d -> %c%d"), *UnitInitial, StartLetter, SelectedUnit->CurrentTile->GetGridPosition().X, EndLetter, ClickedTile->GetGridPosition().X);
+					// ORA STAMPA CORRETTAMENTE LE COORDINATE!
+					FString MoveMsg = FString::Printf(TEXT("HP: %s %c%d -> %c%d"), *UnitInitial, StartLetter, StartNumber, EndLetter, ClickedTile->GetGridPosition().X);
 					GM->AddGameLog(MoveMsg);
 				}
 

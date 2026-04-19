@@ -2,8 +2,10 @@
 #include "GameField.h"
 #include "Tile.h"
 #include "StrategyGameMode.h"
+#include "StrategyTower.h"
 #include "Kismet/GameplayStatics.h"
 #include "Math/UnrealMathUtility.h"
+
 
 AStrategyUnit::AStrategyUnit()
 {
@@ -156,7 +158,7 @@ void AStrategyUnit::Tick(float DeltaTime)
 
 void AStrategyUnit::ExecuteAITurn()
 {
-	UE_LOG(LogTemp, Warning, TEXT("IA: %s sta pensando col nuovo Algoritmo A*..."), *UnitLogID);
+	UE_LOG(LogTemp, Warning, TEXT("IA: %s sta pensando col nuovo Algoritmo..."), *UnitLogID);
 
 	if (!IsValid(GameFieldRef))
 	{
@@ -166,8 +168,37 @@ void AStrategyUnit::ExecuteAITurn()
 		return;
 	}
 
-	AStrategyUnit* ClosestTarget = nullptr;
-	float MinDist = 999999.0f;
+	ATile* TargetTile = nullptr;
+
+	// ==========================================
+	// 1. CERCA LA TORRE CON PRIORITA'
+	// ==========================================
+	TArray<AActor*> AllTowers;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyTower::StaticClass(), AllTowers);
+
+	AStrategyTower* BestTower = nullptr;
+	float MinTowerDist = 999999.0f;
+
+	for (AActor* Actor : AllTowers)
+	{
+		AStrategyTower* Tower = Cast<AStrategyTower>(Actor);
+		// Puntiamo la torre SOLO se non è già controllata da noi
+		if (Tower && Tower->CurrentState != ETowerState::ControlledAI)
+		{
+			float Dist = FVector::Dist(GetActorLocation(), Tower->GetActorLocation());
+			if (Dist < MinTowerDist)
+			{
+				MinTowerDist = Dist;
+				BestTower = Tower;
+			}
+		}
+	}
+
+	// ==========================================
+	// 2. CERCA IL NEMICO PIU' VICINO
+	// ==========================================
+	AStrategyUnit* ClosestEnemy = nullptr;
+	float MinEnemyDist = 999999.0f;
 
 	TArray<AActor*> AllUnits;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyUnit::StaticClass(), AllUnits);
@@ -178,15 +209,96 @@ void AStrategyUnit::ExecuteAITurn()
 		if (Enemy && Enemy->UnitTeam == ETeam::Player && Enemy->CurrentHealth > 0)
 		{
 			float Dist = FVector::Dist(GetActorLocation(), Enemy->GetActorLocation());
-			if (Dist < MinDist)
+			if (Dist < MinEnemyDist)
 			{
-				MinDist = Dist;
-				ClosestTarget = Enemy;
+				MinEnemyDist = Dist;
+				ClosestEnemy = Enemy;
 			}
 		}
 	}
 
-	if (!ClosestTarget)
+	// ==========================================
+	// 3. IL CERVELLO: SCELTA DEL BERSAGLIO
+	// ==========================================
+	// Sottraiamo "1500" (circa 15 celle) alla distanza della torre per darle una priorità enorme!
+	if (BestTower && (MinTowerDist - 1500.0f) < MinEnemyDist)
+	{
+		// Abbiamo scelto la torre! Cerchiamo una cella CALPESTABILE nella sua Zona di Cattura (Raggio 2)
+		for (auto& Elem : GameFieldRef->TileMap)
+		{
+			ATile* T = Elem.Value;
+			if (T && T->bIsWalkable && T->Status != ETileStatus::OBSTACLE && !IsValid(T->UnitOnTile))
+			{
+				int32 DistX = FMath::Abs(T->GetGridPosition().X - BestTower->GridPosition.X);
+				int32 DistY = FMath::Abs(T->GetGridPosition().Y - BestTower->GridPosition.Y);
+
+				if (DistX <= 2 && DistY <= 2)
+				{
+					TargetTile = T;
+					UE_LOG(LogTemp, Warning, TEXT("IA: %s punta alla Torre in X:%d Y:%d"), *UnitLogID, BestTower->GridPosition.X, BestTower->GridPosition.Y);
+					break;
+				}
+			}
+		}
+	}
+
+	// Se non ha trovato una cella per la torre, punta il nemico con logiche diverse per classe
+	if (!TargetTile && ClosestEnemy)
+	{
+		if (this->AttackType == EAttackType::RANGED)
+		{
+			// --- CERVELLO DELLO SNIPER (A* PER L'ATTACCO) ---
+			ATile* BestSniperTile = nullptr;
+			int32 MinDistToSniper = 999999;
+
+			for (auto& Elem : GameFieldRef->TileMap)
+			{
+				ATile* T = Elem.Value;
+
+				// Cerca una cella libera (o quella in cui si trova già lo Sniper, se è già in posizione perfetta!)
+				if (T && T->bIsWalkable && T->Status != ETileStatus::OBSTACLE && (!IsValid(T->UnitOnTile) || T == this->CurrentTile))
+				{
+					int32 DistToEnemy = FMath::Abs(T->GetGridPosition().X - ClosestEnemy->CurrentTile->GetGridPosition().X) +
+						FMath::Abs(T->GetGridPosition().Y - ClosestEnemy->CurrentTile->GetGridPosition().Y);
+
+					// Regola 1 & 2: A tiro (<= AttackRange) E in posizione di vantaggio/pari livello
+					if (DistToEnemy <= this->AttackRange && T->Elevation >= ClosestEnemy->CurrentTile->Elevation)
+					{
+						// Regola 3: Trova la più vicina allo Sniper per non sprecare turni di movimento
+						int32 DistToSniper = FMath::Abs(T->GetGridPosition().X - this->CurrentTile->GetGridPosition().X) +
+							FMath::Abs(T->GetGridPosition().Y - this->CurrentTile->GetGridPosition().Y);
+
+						if (DistToSniper < MinDistToSniper)
+						{
+							MinDistToSniper = DistToSniper;
+							BestSniperTile = T;
+						}
+					}
+				}
+			}
+
+			if (BestSniperTile)
+			{
+				TargetTile = BestSniperTile;
+				UE_LOG(LogTemp, Warning, TEXT("IA: Lo Sniper %s cerca l'appostamento in X:%d Y:%d"), *UnitLogID, TargetTile->GetGridPosition().X, TargetTile->GetGridPosition().Y);
+			}
+			else
+			{
+				// Paracadute: se il nemico è sulla montagna più alta e non c'è spazio, vacci vicino
+				TargetTile = ClosestEnemy->CurrentTile;
+			}
+		}
+		else
+		{
+			// --- CERVELLO DEL BRAWLER ---
+			// Il Brawler è corpo a corpo, deve andare dritto in faccia al nemico
+			TargetTile = ClosestEnemy->CurrentTile;
+			UE_LOG(LogTemp, Warning, TEXT("IA: Il Brawler %s punta dritto al nemico %s"), *UnitLogID, *ClosestEnemy->UnitLogID);
+		}
+	}
+
+	// Paracadute di sicurezza finale
+	if (!TargetTile)
 	{
 		bHasMovedThisTurn = true; bHasAttacked = true; bIsTurnFinished = true;
 		AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
@@ -194,16 +306,34 @@ void AStrategyUnit::ExecuteAITurn()
 		return;
 	}
 
-	TArray<ATile*> AStarPath = GameFieldRef->FindPathAStar(CurrentTile, ClosestTarget->CurrentTile);
+	// ==========================================
+	// 4. LANCIO DELL'ALGORITMO (SCELTO DAL PLAYER)
+	// ==========================================
+	TArray<ATile*> TargetPath;
+
+	// Leggiamo la scelta dal GameMode!
+	AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
+
+	if (GM && GM->ActiveAIAlgorithm == EAIAlgorithm::Greedy)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("IA: %s usa GREEDY BEST-FIRST!"), *UnitLogID);
+		TargetPath = GameFieldRef->FindPathGreedy(CurrentTile, TargetTile);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("IA: %s usa A*!"), *UnitLogID);
+		TargetPath = GameFieldRef->FindPathAStar(CurrentTile, TargetTile);
+	}
 
 	AIBestTargetTile = CurrentTile;
 	int32 AccumulatedCost = 0;
 
 	GameFieldRef->ClearHighlightedTiles();
 
-	for (ATile* StepTile : AStarPath)
+	// Scorriamo TargetPath (che conterrà o A* o Greedy)
+	for (ATile* StepTile : TargetPath)
 	{
-		if (StepTile == ClosestTarget->CurrentTile) break;
+		if (ClosestEnemy && StepTile == ClosestEnemy->CurrentTile) break;
 
 		int32 StepCost = (StepTile->Elevation > AIBestTargetTile->Elevation) ? 2 : 1;
 

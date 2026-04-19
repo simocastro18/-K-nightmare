@@ -272,16 +272,51 @@ void AGameField::SpawnInitialEntities()
 			Zone.RemoveAt(Rnd);
 		}
 		}; // <-- Fine Lambda Unità
+}
 
-	// --- SCHIERAMENTO PLAYER ---
-	// Rotazione antioraria: Yaw = -90.0f
-	//SpawnUnitInZone(BrawlerClass, PlayerZone, ETeam::Player, TEXT("Brawler_P"), -90.0f);
-	//SpawnUnitInZone(SniperClass, PlayerZone, ETeam::Player, TEXT("Sniper_P"), -90.0f);
+void AGameField::SpawnSingleAIUnit(int32 UnitIndex)
+{
+	TArray<ATile*> AIZone;
 
-	// --- SCHIERAMENTO AI ---
-	// Rotazione opposta: Yaw = 90.0f
-	SpawnUnitInZone(BrawlerClass, AIZone, ETeam::AI, TEXT("Brawler_AI"), 90.0f);
-	SpawnUnitInZone(SniperClass, AIZone, ETeam::AI, TEXT("Sniper_AI"), 90.0f);
+	// Cerchiamo le celle valide per l'IA (ultime 3 righe X >= GridSizeX - 3)
+	for (auto& Elem : TileMap)
+	{
+		ATile* T = Elem.Value;
+		if (T && T->IsValidLowLevel() && T->bIsWalkable && T->Status == ETileStatus::EMPTY)
+		{
+			if (T->GetGridPosition().X >= GridSizeX - 3)
+			{
+				AIZone.Add(T);
+			}
+		}
+	}
+
+	if (AIZone.Num() > 0)
+	{
+		int32 Rnd = FMath::RandRange(0, AIZone.Num() - 1);
+		ATile* T = AIZone[Rnd];
+
+		// Sceglie cosa spawnare: la prima volta il Brawler (0), la seconda lo Sniper (1)
+		TSubclassOf<AActor> ClassToSpawn = (UnitIndex == 0) ? BrawlerClass : SniperClass;
+		FString LogID = (UnitIndex == 0) ? TEXT("Brawler_AI") : TEXT("Sniper_AI");
+
+		FVector Loc = T->GetActorLocation() + FVector(0, 0, 100);
+		FTransform SpawnTransform(FRotator(0.0f, 90.0f, 0.0f), Loc, FVector(0.5f, 0.5f, 0.5f));
+
+		AActor* NewUnit = GetWorld()->SpawnActorDeferred<AActor>(ClassToSpawn, SpawnTransform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (NewUnit)
+		{
+			T->SetTileStatus(-1, ETileStatus::OCCUPIED);
+			T->SetUnitOnTile(NewUnit);
+
+			AStrategyUnit* StrategyUnit = Cast<AStrategyUnit>(NewUnit);
+			if (StrategyUnit) { StrategyUnit->GameFieldRef = this; }
+
+			UGameplayStatics::FinishSpawningActor(NewUnit, SpawnTransform);
+
+			if (StrategyUnit) { StrategyUnit->InitializeUnit(LogID, ETeam::AI, 90.0f, T); }
+		}
+	}
 }
 
 void AGameField::ClearHighlightedTiles()
@@ -464,7 +499,7 @@ void AGameField::HighlightAttackableTiles(AStrategyUnit* AttackingUnit)
 
 					if (IsValid(CheckTile) && CheckTile != AttackingUnit->CurrentTile)
 					{
-						// CONTROLLO BERSAGLIO E FUOCO AMICO DEFINITIVO
+						// CONTROLLO BERSAGLIO E FUOCO AMICO
 						if (IsValid(CheckTile->UnitOnTile))
 						{
 							AStrategyUnit* TargetUnit = Cast<AStrategyUnit>(CheckTile->UnitOnTile);
@@ -472,6 +507,18 @@ void AGameField::HighlightAttackableTiles(AStrategyUnit* AttackingUnit)
 							// 1. L'unità deve esistere e NON deve essere del mio stesso team
 							if (IsValid(TargetUnit) && TargetUnit->UnitTeam != AttackingUnit->UnitTeam)
 							{
+								// --- NUOVO FIX: CONTROLLO LINE OF SIGHT (SOLO PER LO SNIPER) ---
+								if (AttackingUnit->AttackType == EAttackType::RANGED)
+								{
+									// Mettiamo CheckTile al posto di T!
+									// Se c'è una montagna in mezzo, la visuale è bloccata: salta questo bersaglio!
+									if (!HasLineOfSight(AttackingUnit->CurrentTile, CheckTile))
+									{
+										UE_LOG(LogTemp, Warning, TEXT("Visuale bloccata dalle montagne verso %s!"), *TargetUnit->UnitLogID);
+										continue;
+									}
+								}
+
 								// 2. REGOLA DELL'ALTEZZA: Posso attaccare solo se il bersaglio è più in basso o al mio stesso livello
 								if (CheckTile->Elevation <= AttackingUnit->CurrentTile->Elevation)
 								{
@@ -611,4 +658,126 @@ void AGameField::HighlightDeploymentZone()
 			HighlightedTiles.Add(T);
 		}
 	}
+}
+
+TArray<ATile*> AGameField::FindPathGreedy(ATile* InStartTile, ATile* InTargetTile)
+{
+	TArray<ATile*> FinalPath;
+	if (!InStartTile || !InTargetTile) return FinalPath;
+
+	TArray<ATile*> OpenSet;
+	TSet<ATile*> ClosedSet;
+
+	OpenSet.Add(InStartTile);
+
+	CameFromMap.Empty();
+	CameFromMap.Add(InStartTile, nullptr);
+
+	FIntPoint Directions[4] = { FIntPoint(0, 1), FIntPoint(0, -1), FIntPoint(1, 0), FIntPoint(-1, 0) };
+
+	while (OpenSet.Num() > 0)
+	{
+		// Il cuore del Greedy: cerca SOLO la casella con la distanza (H) minore dal bersaglio!
+		int32 BestIndex = 0;
+		int32 LowestH = 999999;
+
+		for (int32 i = 0; i < OpenSet.Num(); ++i)
+		{
+			int32 HScore = FMath::Abs(OpenSet[i]->GetGridPosition().X - InTargetTile->GetGridPosition().X) +
+				FMath::Abs(OpenSet[i]->GetGridPosition().Y - InTargetTile->GetGridPosition().Y);
+
+			if (HScore < LowestH)
+			{
+				LowestH = HScore;
+				BestIndex = i;
+			}
+		}
+
+		ATile* Current = OpenSet[BestIndex];
+
+		if (Current == InTargetTile)
+		{
+			ATile* Trace = Current;
+			while (Trace != InStartTile)
+			{
+				FinalPath.Insert(Trace, 0);
+				Trace = CameFromMap[Trace];
+			}
+			return FinalPath;
+		}
+
+		OpenSet.RemoveAt(BestIndex);
+		ClosedSet.Add(Current);
+
+		for (FIntPoint Dir : Directions)
+		{
+			FIntPoint NeighborCoord = Current->GetGridPosition() + Dir;
+			if (ATile** FoundTilePtr = TileMap.Find(NeighborCoord))
+			{
+				ATile* Neighbor = *FoundTilePtr;
+
+				if (!Neighbor->bIsWalkable || Neighbor->Status == ETileStatus::OBSTACLE || ClosedSet.Contains(Neighbor))
+					continue;
+
+				if (Neighbor->UnitOnTile != nullptr && Neighbor != InTargetTile)
+					continue;
+
+				if (!ClosedSet.Contains(Neighbor) && !OpenSet.Contains(Neighbor))
+				{
+					OpenSet.Add(Neighbor);
+					CameFromMap.Add(Neighbor, Current);
+				}
+			}
+		}
+	}
+	return FinalPath;
+}
+
+// ==========================================
+// ALGORITMO DI BRESENHAM (LINE OF SIGHT)
+// ==========================================
+bool AGameField::HasLineOfSight(ATile* InStartTile, ATile* InTargetTile)
+{
+	if (!InStartTile || !InTargetTile) return false;
+
+	int32 X0 = InStartTile->GetGridPosition().X;
+	int32 Y0 = InStartTile->GetGridPosition().Y;
+	int32 X1 = InTargetTile->GetGridPosition().X;
+	int32 Y1 = InTargetTile->GetGridPosition().Y;
+
+	int32 DX = FMath::Abs(X1 - X0);
+	int32 DY = FMath::Abs(Y1 - Y0);
+	int32 SX = (X0 < X1) ? 1 : -1;
+	int32 SY = (Y0 < Y1) ? 1 : -1;
+	int32 Error = DX - DY;
+
+	int32 StartElevation = InStartTile->Elevation;
+
+	while (true)
+	{
+		// Escludiamo la cella di partenza e quella di arrivo dai controlli dell'ostacolo
+		if ((X0 != InStartTile->GetGridPosition().X || Y0 != InStartTile->GetGridPosition().Y) &&
+			(X0 != InTargetTile->GetGridPosition().X || Y0 != InTargetTile->GetGridPosition().Y))
+		{
+			FIntPoint CurrentPoint(X0, Y0);
+			if (ATile** IntersectTilePtr = TileMap.Find(CurrentPoint))
+			{
+				ATile* IntersectTile = *IntersectTilePtr;
+
+				// LA REGOLA MAGICA: Se incontriamo una montagna che è PIÙ ALTA dello Sniper, la visuale è bloccata!
+				if (IntersectTile->Elevation > StartElevation)
+				{
+					return false;
+				}
+			}
+		}
+
+		if (X0 == X1 && Y0 == Y1) break;
+
+		int32 E2 = 2 * Error;
+		if (E2 > -DY) { Error -= DY; X0 += SX; }
+		if (E2 < DX) { Error += DX; Y0 += SY; }
+	}
+
+	return true;
 }

@@ -1,4 +1,5 @@
 #include "StrategyGameMode.h"
+#include "GameField.h"            // <--- AGGIUNGI QUESTA RIGA!
 #include "Kismet/GameplayStatics.h"
 #include "StrategyTower.h"
 #include "StrategyUnit.h"
@@ -56,6 +57,8 @@ void AStrategyGameMode::RestartGame()
 
 void AStrategyGameMode::StartGameWithConfig(FGameConfig Config)
 {
+	ActiveAIAlgorithm = Config.SelectedAIAlgorithm;
+
 	if (MapGenerator)
 	{
 		MapGenerator->NoiseScale = Config.NoiseScale;
@@ -63,11 +66,74 @@ void AStrategyGameMode::StartGameWithConfig(FGameConfig Config)
 		MapGenerator->GridSizeY = Config.GridSizeY;
 
 		MapGenerator->GenerateGridData();
-		MapGenerator->SpawnInitialEntities();
+		MapGenerator->SpawnInitialEntities(); // Ora spawnerà solo le torri
 	}
 
-	// IL FIX FONDAMENTALE: Niente moneta qui! Mettiamo il gioco in pausa per lo schieramento
 	CurrentTurnState = ETurnState::Deployment;
+	StartCoinFlipAndDeployment(); // LANCIO DELLA MONETA PRIMA DELLO SCHIERAMENTO!
+}
+
+void AStrategyGameMode::StartCoinFlipAndDeployment()
+{
+	// 3. Viene effettuato il lancio di una moneta.
+	if (FMath::RandBool())
+	{
+		FirstTurnWinner = ETeam::Player;
+		bPlayerDeploysNext = true;
+		AddGameLog(TEXT("Moneta: Il Giocatore piazza per primo!"));
+	}
+	else
+	{
+		FirstTurnWinner = ETeam::AI;
+		bPlayerDeploysNext = false;
+		AddGameLog(TEXT("Moneta: L'IA piazza per prima!"));
+	}
+
+	AdvanceDeployment();
+}
+
+void AStrategyGameMode::AdvanceDeployment()
+{
+	// Controlliamo se tutti hanno piazzato le loro 2 unità
+	if (PlayerUnitsPlaced >= 2 && AIUnitsPlaced >= 2)
+	{
+		AddGameLog(TEXT("Schieramento completato!"));
+
+		// Sblocchiamo il mouse al 100%
+		APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		if (PC) { PC->SetInputMode(FInputModeGameAndUI()); }
+
+		// 7. Il vincitore del lancio esegue il primo turno.
+		if (FirstTurnWinner == ETeam::Player)
+		{
+			CurrentTurnState = ETurnState::PlayerTurn;
+			AddGameLog(TEXT("=== INIZIA IL GIOCATORE ==="));
+		}
+		else
+		{
+			CurrentTurnState = ETurnState::AITurn;
+			AddGameLog(TEXT("=== INIZIA L'INTELLIGENZA ARTIFICIALE ==="));
+			GetWorldTimerManager().SetTimerForNextTick(this, &AStrategyGameMode::ProcessAITurn);
+		}
+		return;
+	}
+
+	if (bPlayerDeploysNext)
+	{
+		// Aspettiamo che il Player usi l'interfaccia WBP_Deployment
+		UE_LOG(LogTemp, Warning, TEXT("Tocca al Player piazzare un'unita'."));
+	}
+	else
+	{
+		// Tocca all'IA piazzare
+		if (MapGenerator)
+		{
+			MapGenerator->SpawnSingleAIUnit(AIUnitsPlaced);
+			AIUnitsPlaced++;
+			bPlayerDeploysNext = true; // Passa la palla al giocatore
+			AdvanceDeployment();       // Ricalcola lo stato
+		}
+	}
 }
 
 void AStrategyGameMode::CheckRemainingMoves()
@@ -262,7 +328,7 @@ void AStrategyGameMode::EvaluateTowers()
 		}
 	}
 }
-
+/*
 void AStrategyGameMode::StartFirstTurn()
 {
 	// 1. RESET DI SICUREZZA: Assicuriamoci che tutte le unità siano fresche
@@ -311,7 +377,7 @@ void AStrategyGameMode::StartFirstTurn()
 		GetWorldTimerManager().SetTimerForNextTick(this, &AStrategyGameMode::ProcessAITurn);
 	}
 }
-
+*/
 FString AStrategyGameMode::GetCellCoordinateName(int32 X, int32 Y)
 {
 	// Convertiamo la Y (0-24) nella lettera corrispondente (A-Y)
