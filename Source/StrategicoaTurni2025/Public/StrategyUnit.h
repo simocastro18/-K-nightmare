@@ -129,10 +129,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
 	bool bIsMoving = false;
 
-	// Note: Consider removing HealthPoints if CurrentHealth is the primary tracker
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats")
-	int32 HealthPoints = 10;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
 	float MoveSpeed = 600.0f;
 

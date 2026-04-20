@@ -115,11 +115,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "UI Log")
 	void AddGameLog(const FString& Message);
 
-	UPROPERTY(BlueprintReadOnly, Category = "Game State")
-	int32 PlayerTowers = 0;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Game State")
-	int32 AITowers = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Game State")
 	int32 CurrentTurnNumber = 1;
