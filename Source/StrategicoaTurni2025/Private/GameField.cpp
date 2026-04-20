@@ -5,8 +5,6 @@
 #include "StrategyGameMode.h"
 #include "Math/UnrealMathUtility.h"
 #include "Kismet/GameplayStatics.h"
-//debug
-//#include "DrawDebugHelpers.h"
 
 AGameField::AGameField()
 {
@@ -16,16 +14,13 @@ AGameField::AGameField()
 void AGameField::BeginPlay()
 {
 	Super::BeginPlay();
-	// FORZATURA GRAFICA: Spegne le ombre su qualsiasi PC
+
+	// Graphic Optimization: Force shadows off to ensure consistent performance on any hardware
 	if (GEngine)
 	{
-		// Disattiva il gruppo di scalabilità delle ombre
 		GEngine->Exec(GetWorld(), TEXT("sg.ShadowQuality 0"));
-
-		// Per sicurezza extra, forza la variabile interna del rendering
 		GEngine->Exec(GetWorld(), TEXT("r.ShadowQuality 0"));
 	}
-
 }
 
 void AGameField::GenerateGridData()
@@ -35,12 +30,16 @@ void AGameField::GenerateGridData()
 	float SafeNoise = (NoiseScale <= 0.0f) ? 0.1f : NoiseScale;
 	int32 Attempts = 0;
 
-	while (!bIsMapValid && Attempts < 50) {
+	// Loop until a fully connected map is generated (max 50 attempts to avoid infinite loops)
+	while (!bIsMapValid && Attempts < 50)
+	{
 		Attempts++;
 		float OffsetX = 0.0f;
 		float OffsetY = 0.0f;
 
-		if (bUseRandomSeed || Attempts > 1) {
+		// Use a random seed for procedural generation if requested, or if previous attempts failed
+		if (bUseRandomSeed || Attempts > 1)
+		{
 			RandomSeed = FMath::RandRange(1, 999999);
 			OffsetX = (RandomSeed % 1000) * 10.0f;
 			OffsetY = ((RandomSeed * 2) % 1000) * 10.0f;
@@ -48,6 +47,7 @@ void AGameField::GenerateGridData()
 
 		GridData.Empty();
 
+		// Algorithm: 2D Perlin Noise for natural terrain generation
 		for (int32 Y = 0; Y < GridSizeY; ++Y)
 		{
 			for (int32 X = 0; X < GridSizeX; ++X)
@@ -60,6 +60,7 @@ void AGameField::GenerateGridData()
 				float SampleY = (Y * SafeNoise) + OffsetY;
 				float NoiseValue = FMath::PerlinNoise2D(FVector2D(SampleX, SampleY));
 
+				// Normalize the noise from [-1, 1] to [0, 1] and apply clamping/exponentiation for better island shapes
 				float NormalizedNoise = (NoiseValue + 1.0f) / 2.0f;
 				NormalizedNoise = FMath::Pow(NormalizedNoise, 1.8f);
 				NormalizedNoise = NormalizedNoise * 1.55f;
@@ -68,16 +69,19 @@ void AGameField::GenerateGridData()
 
 				NewCell.Elevation = FMath::RoundToInt(NormalizedNoise * SafeMaxHeight);
 				NewCell.Elevation = FMath::Clamp(NewCell.Elevation, 0, SafeMaxHeight);
-				NewCell.bIsWalkable = (NewCell.Elevation > 0);
+				NewCell.bIsWalkable = (NewCell.Elevation > 0); // Elevation 0 is water (obstacle)
 
 				GridData.Add(NewCell);
 			}
 		}
+
+		// Verify if the generated layout contains isolated inaccessible areas
 		bIsMapValid = IsMapFullyConnected();
 	}
 
 	TileMap.Empty();
 
+	// Spawn the physical tiles based on the generated logical grid
 	for (const FGridCell& Cell : GridData)
 	{
 		FVector SpawnLocation = FVector(Cell.X * CellSize, Cell.Y * CellSize, 0.0f);
@@ -94,7 +98,8 @@ void AGameField::GenerateGridData()
 
 				NewTile->UpdateTileColor();
 
-				if (!Cell.bIsWalkable) {
+				if (!Cell.bIsWalkable)
+				{
 					NewTile->SetTileStatus(-1, ETileStatus::OBSTACLE);
 				}
 
@@ -111,6 +116,7 @@ bool AGameField::IsMapFullyConnected()
 	int32 StartX = -1;
 	int32 StartY = -1;
 
+	// Count total walkable cells and find a starting point for the flood fill
 	for (const FGridCell& Cell : GridData)
 	{
 		if (Cell.bIsWalkable)
@@ -126,6 +132,7 @@ bool AGameField::IsMapFullyConnected()
 
 	if (TotalWalkableCells == 0) return false;
 
+	// Algorithm: Breadth-First Search (BFS) / Flood Fill to check map connectivity
 	TArray<bool> Visited;
 	Visited.Init(false, GridSizeX * GridSizeY);
 
@@ -165,6 +172,7 @@ bool AGameField::IsMapFullyConnected()
 		}
 	}
 
+	// The map is fully connected if the BFS reached all walkable cells
 	return ReachedCells == TotalWalkableCells;
 }
 
@@ -175,11 +183,9 @@ void AGameField::SpawnInitialEntities()
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	// =========================================================
-	// FASE 1: PIAZZAMENTO TORRI
-	// =========================================================
+	// Lambda function for adaptive tower placement (finds the closest valid tile to the ideal coordinate)
 	auto SpawnTowerAtBestLocation = [&](FIntPoint TargetCoord) {
-		ATile* BestTile = nullptr; // <--- Era questa la riga che probabilmente è sparita!
+		ATile* BestTile = nullptr;
 		float MinDistance = 999999.0f;
 
 		for (auto& Elem : TileMap)
@@ -206,7 +212,7 @@ void AGameField::SpawnInitialEntities()
 			AActor* NewTower = GetWorld()->SpawnActor<AActor>(TowerClass, Loc, FRotator::ZeroRotator, SpawnParams);
 			if (NewTower)
 			{
-				BestTile->SetTileStatus(-1, ETileStatus::OBSTACLE); // Ostacolo
+				BestTile->SetTileStatus(-1, ETileStatus::OBSTACLE);
 
 				AStrategyTower* StratTower = Cast<AStrategyTower>(NewTower);
 				if (StratTower)
@@ -215,81 +221,19 @@ void AGameField::SpawnInitialEntities()
 				}
 			}
 		}
-		}; // <-- Fine Lambda Torri
+		};
 
+	// Ideal target coordinates for towers (Center, Left, Right)
 	SpawnTowerAtBestLocation(FIntPoint(12, 12));
 	SpawnTowerAtBestLocation(FIntPoint(12, 5));
 	SpawnTowerAtBestLocation(FIntPoint(12, 19));
-
-	// =========================================================
-	// FASE 2: PIAZZAMENTO UNITA' (ALTO E BASSO SULL'ASSE X)
-	// =========================================================
-	TArray<ATile*> PlayerZone;
-	TArray<ATile*> AIZone;
-
-	for (auto& Elem : TileMap)
-	{
-		ATile* T = Elem.Value;
-		if (T && T->IsValidLowLevel() && T->bIsWalkable && T->Status == ETileStatus::EMPTY)
-		{
-			// INVERSIONE: X piccola (<= 2) è la parte BASSA visiva (Zona Giocatore)
-			if (T->GetGridPosition().X <= 2)
-			{
-				PlayerZone.Add(T);
-			}
-			// X grande è la parte ALTA visiva (Zona AI)
-			else if (T->GetGridPosition().X >= GridSizeX - 3)
-			{
-				AIZone.Add(T);
-			}
-		}
-	}
-
-	// [ ... MANTIENI LA TUA LAMBDA FASE 3 QUI IN MEZZO ... ]
-
-	// =========================================================
-	// FASE 3: SPAWN 
-	// (Mantengo lo spawn automatico per questo test, lo toglieremo quando facciamo la UI!)
-	// =========================================================
-	auto SpawnUnitInZone = [&](TSubclassOf<AActor> LClass, TArray<ATile*>& Zone, ETeam AssignedTeam, FString UnitLogID, float SpawnYaw) {
-		if (!LClass || Zone.Num() == 0) return;
-
-		int32 Rnd = FMath::RandRange(0, Zone.Num() - 1);
-		ATile* T = Zone[Rnd];
-
-		FVector Loc = T->GetActorLocation() + FVector(0, 0, 100);
-		FVector SpawnScale(0.5f, 0.5f, 0.5f);
-		FTransform SpawnTransform(FRotator(0.0f, SpawnYaw, 0.0f), Loc, SpawnScale);
-
-		AActor* NewUnit = GetWorld()->SpawnActorDeferred<AActor>(LClass, SpawnTransform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-		if (NewUnit)
-		{
-			T->SetTileStatus(-1, ETileStatus::OCCUPIED);
-			T->SetUnitOnTile(NewUnit);
-
-			AStrategyUnit* StrategyUnit = Cast<AStrategyUnit>(NewUnit);
-			if (StrategyUnit)
-			{
-				StrategyUnit->GameFieldRef = this;
-			}
-
-			UGameplayStatics::FinishSpawningActor(NewUnit, SpawnTransform);
-
-			if (StrategyUnit)
-			{
-				StrategyUnit->InitializeUnit(UnitLogID, AssignedTeam, SpawnYaw, T);
-			}
-
-			Zone.RemoveAt(Rnd);
-		}
-		}; // <-- Fine Lambda Unità
 }
 
 void AGameField::SpawnSingleAIUnit(int32 UnitIndex)
 {
 	TArray<ATile*> AIZone;
 
-	// Cerchiamo le celle valide per l'IA (ultime 3 righe X >= GridSizeX - 3)
+	// AI valid deployment zone (Top 3 rows of the grid)
 	for (auto& Elem : TileMap)
 	{
 		ATile* T = Elem.Value;
@@ -307,7 +251,7 @@ void AGameField::SpawnSingleAIUnit(int32 UnitIndex)
 		int32 Rnd = FMath::RandRange(0, AIZone.Num() - 1);
 		ATile* T = AIZone[Rnd];
 
-		// Sceglie cosa spawnare: la prima volta il Brawler (0), la seconda lo Sniper (1)
+		// Alternate spawning: Brawler (Index 0), Sniper (Index 1)
 		TSubclassOf<AActor> ClassToSpawn = (UnitIndex == 0) ? BrawlerClass : SniperClass;
 		FString LogID = (UnitIndex == 0) ? TEXT("Brawler_AI") : TEXT("Sniper_AI");
 
@@ -327,13 +271,10 @@ void AGameField::SpawnSingleAIUnit(int32 UnitIndex)
 
 			if (StrategyUnit) { StrategyUnit->InitializeUnit(LogID, ETeam::AI, 90.0f, T); }
 
-			// ==========================================
-			// NUOVO: LOG DI SCHIERAMENTO IA
-			// ==========================================
+			// Send deployment action to the Game Mode combat log
 			AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 			if (GM)
 			{
-				// Se UnitIndex è 0 è il Brawler (B), altrimenti è lo Sniper (S)
 				FString UnitInitial = (UnitIndex == 0) ? TEXT("B") : TEXT("S");
 				char ColLetter = 'A' + T->GetGridPosition().Y;
 				int32 RowNum = T->GetGridPosition().X;
@@ -346,11 +287,6 @@ void AGameField::SpawnSingleAIUnit(int32 UnitIndex)
 
 void AGameField::ClearHighlightedTiles()
 {
-
-	// debug
-	UE_LOG(LogTemp, Error, TEXT("STO SPEGNENDO LE LUCI ROSSE DEI BERSAGLI!"));
-
-
 	for (ATile* Tile : HighlightedTiles)
 	{
 		if (IsValid(Tile))
@@ -373,6 +309,7 @@ void AGameField::HighlightReachableTiles(AStrategyUnit* SelectedUnit)
 
 	if (MaxRange <= 0) return;
 
+	// Algorithm: Dijkstra's Pathfinding (Cost-based grid exploration)
 	TMap<ATile*, int32> CostSoFar;
 	TArray<ATile*> Frontier;
 
@@ -389,6 +326,7 @@ void AGameField::HighlightReachableTiles(AStrategyUnit* SelectedUnit)
 
 	while (Frontier.Num() > 0)
 	{
+		// Extract the tile with the lowest accumulated cost
 		int32 BestIndex = 0;
 		for (int32 i = 1; i < Frontier.Num(); ++i)
 		{
@@ -405,6 +343,7 @@ void AGameField::HighlightReachableTiles(AStrategyUnit* SelectedUnit)
 
 		int32 CurrentCost = CostSoFar[Current];
 
+		// Check all 4 adjacent neighbors
 		for (FIntPoint Dir : Directions)
 		{
 			FIntPoint NeighborCoord = Current->GetGridPosition() + Dir;
@@ -413,8 +352,10 @@ void AGameField::HighlightReachableTiles(AStrategyUnit* SelectedUnit)
 			{
 				ATile* Neighbor = *FoundTilePtr;
 
+				// Proceed only if walkable, not an obstacle, and unoccupied
 				if (IsValid(Neighbor) && Neighbor->bIsWalkable && Neighbor->Status != ETileStatus::OBSTACLE && !IsValid(Neighbor->UnitOnTile))
 				{
+					// Moving to a higher elevation costs 2 movement points, otherwise 1
 					int32 StepCost = (Neighbor->Elevation > Current->Elevation) ? 2 : 1;
 					int32 NewCost = CurrentCost + StepCost;
 
@@ -434,6 +375,7 @@ void AGameField::HighlightReachableTiles(AStrategyUnit* SelectedUnit)
 
 	ClearHighlightedTiles();
 
+	// Visually highlight all tiles processed within the allowed movement range
 	for (auto& Elem : CostSoFar)
 	{
 		ATile* ReachableTile = Elem.Key;
@@ -457,6 +399,7 @@ TArray<FVector> AGameField::GetPathToTile(ATile* DestinationTile)
 	ATile* CurrentTile = DestinationTile;
 	int32 SafetyCounter = 0;
 
+	// Backtrack from destination to start using the CameFromMap
 	while (IsValid(CurrentTile) && SafetyCounter < 1000)
 	{
 		Path.Add(CurrentTile->GetActorLocation());
@@ -475,12 +418,14 @@ TArray<FVector> AGameField::GetPathToTile(ATile* DestinationTile)
 		SafetyCounter++;
 	}
 
+	// Reverse array to obtain Start->Destination order
 	int32 NumElements = Path.Num();
 	for (int32 i = 0; i < NumElements / 2; ++i)
 	{
 		Path.Swap(i, NumElements - 1 - i);
 	}
 
+	// Remove the starting tile from the path execution
 	if (Path.Num() > 0)
 	{
 		Path.RemoveAt(0);
@@ -510,10 +455,12 @@ void AGameField::HighlightAttackableTiles(AStrategyUnit* AttackingUnit)
 	FIntPoint StartPos = AttackingUnit->CurrentTile->GetGridPosition();
 	int32 Range = AttackingUnit->AttackRange;
 
+	// Loop through a bounding box defined by the attack range
 	for (int32 dx = -Range; dx <= Range; ++dx)
 	{
 		for (int32 dy = -Range; dy <= Range; ++dy)
 		{
+			// Manhattan distance check to form a diamond shape attack area
 			if (FMath::Abs(dx) + FMath::Abs(dy) <= Range)
 			{
 				FIntPoint CheckPos(StartPos.X + dx, StartPos.Y + dy);
@@ -524,38 +471,27 @@ void AGameField::HighlightAttackableTiles(AStrategyUnit* AttackingUnit)
 
 					if (IsValid(CheckTile) && CheckTile != AttackingUnit->CurrentTile)
 					{
-						// CONTROLLO BERSAGLIO E FUOCO AMICO
+						// Target Identification and Friendly Fire check
 						if (IsValid(CheckTile->UnitOnTile))
 						{
 							AStrategyUnit* TargetUnit = Cast<AStrategyUnit>(CheckTile->UnitOnTile);
 
-							// 1. L'unità deve esistere e NON deve essere del mio stesso team
 							if (IsValid(TargetUnit) && TargetUnit->UnitTeam != AttackingUnit->UnitTeam)
 							{
-								// --- NUOVO FIX: CONTROLLO LINE OF SIGHT (SOLO PER LO SNIPER) ---
+								// Sniper logic: Check Line of Sight against mountains
 								if (AttackingUnit->AttackType == EAttackType::RANGED)
 								{
-									// Mettiamo CheckTile al posto di T!
-									// Se c'è una montagna in mezzo, la visuale è bloccata: salta questo bersaglio!
 									if (!HasLineOfSight(AttackingUnit->CurrentTile, CheckTile))
 									{
-										UE_LOG(LogTemp, Warning, TEXT("Visuale bloccata dalle montagne verso %s!"), *TargetUnit->UnitLogID);
-										continue;
+										continue; // Visual is blocked, skip target
 									}
 								}
 
-								// 2. REGOLA DELL'ALTEZZA: Posso attaccare solo se il bersaglio è più in basso o al mio stesso livello
+								// Elevation rule: Can only attack enemies on the same level or lower
 								if (CheckTile->Elevation <= AttackingUnit->CurrentTile->Elevation)
 								{
-									UE_LOG(LogTemp, Error, TEXT("ACCENDO LUCE ROSSA SU NEMICO: %s in X:%d Y:%d"), *TargetUnit->UnitLogID, CheckTile->GetGridPosition().X, CheckTile->GetGridPosition().Y);
 									CheckTile->UpdateAttackHighlight(true);
 									AttackableTiles.Add(CheckTile);
-								}
-								else
-								{
-									// Log opzionale per capire perché la cella non si è accesa
-									UE_LOG(LogTemp, Warning, TEXT("BERSAGLIO %s TROPPO IN ALTO! (Altezza Attaccante: %d, Altezza Bersaglio: %d)"),
-										*TargetUnit->UnitLogID, AttackingUnit->CurrentTile->Elevation, CheckTile->Elevation);
 								}
 							}
 						}
@@ -571,22 +507,22 @@ TArray<ATile*> AGameField::FindPathAStar(ATile* InStartTile, ATile* InTargetTile
 	TArray<ATile*> FinalPath;
 	if (!InStartTile || !InTargetTile) return FinalPath;
 
+	// Algorithm: A* (A-Star)
+	// Combines the guaranteed shortest path of Dijkstra with a distance heuristic
 	TArray<ATile*> OpenSet;
 	TSet<ATile*> ClosedSet;
 
-	TMap<ATile*, int32> GScore; // Costo dal punto di partenza
-	TMap<ATile*, int32> FScore; // GScore + Euristica (Distanza Stimata)
+	TMap<ATile*, int32> GScore; // Cost from start
+	TMap<ATile*, int32> FScore; // GScore + Heuristic (Estimated distance to target)
 
-	// Inizializziamo il punto di partenza
 	OpenSet.Add(InStartTile);
 	GScore.Add(InStartTile, 0);
 
-	// L'Euristica (Distanza Manhattan: contiamo i passi in orizzontale e verticale)
+	// Heuristic: Manhattan Distance (Horizontal + Vertical steps)
 	int32 DistX = FMath::Abs(InStartTile->GetGridPosition().X - InTargetTile->GetGridPosition().X);
 	int32 DistY = FMath::Abs(InStartTile->GetGridPosition().Y - InTargetTile->GetGridPosition().Y);
 	FScore.Add(InStartTile, DistX + DistY);
 
-	// Puliamo la mappa globale così il movimento del tuo gioco funzionerà in automatico!
 	CameFromMap.Empty();
 	CameFromMap.Add(InStartTile, nullptr);
 
@@ -594,7 +530,7 @@ TArray<ATile*> AGameField::FindPathAStar(ATile* InStartTile, ATile* InTargetTile
 
 	while (OpenSet.Num() > 0)
 	{
-		// 1. Trova la cella nell'OpenSet con l'FScore più basso
+		// 1. Find the tile in OpenSet with the lowest FScore
 		int32 BestIndex = 0;
 		int32 LowestF = FScore.Contains(OpenSet[0]) ? FScore[OpenSet[0]] : 999999;
 
@@ -610,7 +546,7 @@ TArray<ATile*> AGameField::FindPathAStar(ATile* InStartTile, ATile* InTargetTile
 
 		ATile* Current = OpenSet[BestIndex];
 
-		// 2. Se siamo arrivati al bersaglio, ricostruiamo il percorso al contrario
+		// 2. If target reached, reconstruct path backwards
 		if (Current == InTargetTile)
 		{
 			ATile* Trace = Current;
@@ -622,11 +558,10 @@ TArray<ATile*> AGameField::FindPathAStar(ATile* InStartTile, ATile* InTargetTile
 			return FinalPath;
 		}
 
-		// 3. Spostiamo la cella corrente tra quelle già analizzate
 		OpenSet.RemoveAt(BestIndex);
 		ClosedSet.Add(Current);
 
-		// 4. Analizziamo i vicini
+		// 3. Analyze neighbors
 		for (FIntPoint Dir : Directions)
 		{
 			FIntPoint NeighborCoord = Current->GetGridPosition() + Dir;
@@ -634,15 +569,13 @@ TArray<ATile*> AGameField::FindPathAStar(ATile* InStartTile, ATile* InTargetTile
 			{
 				ATile* Neighbor = *FoundTilePtr;
 
-				// Ignora ostacoli e celle già chiuse
 				if (!Neighbor->bIsWalkable || Neighbor->Status == ETileStatus::OBSTACLE || ClosedSet.Contains(Neighbor))
 					continue;
 
-				// Ignora i blocchi occupati da altre unità (Tranne se è il bersaglio stesso!)
+				// Ignore tiles occupied by other units (unless it is the final target itself)
 				if (Neighbor->UnitOnTile != nullptr && Neighbor != InTargetTile)
 					continue;
 
-				// Calcolo costo del dislivello (La tua regola dell'Elevation!)
 				int32 StepCost = (Neighbor->Elevation > Current->Elevation) ? 2 : 1;
 				int32 TentativeG = GScore[Current] + StepCost;
 
@@ -652,10 +585,10 @@ TArray<ATile*> AGameField::FindPathAStar(ATile* InStartTile, ATile* InTargetTile
 				}
 				else if (TentativeG >= (GScore.Contains(Neighbor) ? GScore[Neighbor] : 999999))
 				{
-					continue; // Abbiamo trovato una strada peggiore, ignoriamola
+					continue; // Found a worse path, ignore
 				}
 
-				// Se arriviamo qui, abbiamo trovato la strada migliore per questo vicino!
+				// Record the best path found so far
 				CameFromMap.Add(Neighbor, Current);
 				GScore.Add(Neighbor, TentativeG);
 
@@ -671,15 +604,15 @@ TArray<ATile*> AGameField::FindPathAStar(ATile* InStartTile, ATile* InTargetTile
 
 void AGameField::HighlightDeploymentZone()
 {
-	ClearHighlightedTiles(); // Per sicurezza spegniamo tutto prima
+	ClearHighlightedTiles();
 
+	// Player valid deployment zone (Bottom 3 rows: X <= 2)
 	for (auto& Elem : TileMap)
 	{
 		ATile* T = Elem.Value;
-		// Controlliamo che la cella sia valida, camminabile, vuota e... nella TUA ZONA (X <= 2)
 		if (T && T->IsValidLowLevel() && T->bIsWalkable && T->Status == ETileStatus::EMPTY && T->GetGridPosition().X <= 2)
 		{
-			T->OnSelectionChanged(true); // Accende la cella di azzurro
+			T->OnSelectionChanged(true);
 			HighlightedTiles.Add(T);
 		}
 	}
@@ -690,6 +623,8 @@ TArray<ATile*> AGameField::FindPathGreedy(ATile* InStartTile, ATile* InTargetTil
 	TArray<ATile*> FinalPath;
 	if (!InStartTile || !InTargetTile) return FinalPath;
 
+	// Algorithm: Greedy Best-First Search
+	// Extremely fast heuristic algorithm that ignores terrain cost (G) and solely relies on distance (H)
 	TArray<ATile*> OpenSet;
 	TSet<ATile*> ClosedSet;
 
@@ -702,10 +637,10 @@ TArray<ATile*> AGameField::FindPathGreedy(ATile* InStartTile, ATile* InTargetTil
 
 	while (OpenSet.Num() > 0)
 	{
-		// Il cuore del Greedy: cerca SOLO la casella con la distanza (H) minore dal bersaglio!
 		int32 BestIndex = 0;
 		int32 LowestH = 999999;
 
+		// Select the node with the absolute lowest HScore (closest to target)
 		for (int32 i = 0; i < OpenSet.Num(); ++i)
 		{
 			int32 HScore = FMath::Abs(OpenSet[i]->GetGridPosition().X - InTargetTile->GetGridPosition().X) +
@@ -758,13 +693,12 @@ TArray<ATile*> AGameField::FindPathGreedy(ATile* InStartTile, ATile* InTargetTil
 	return FinalPath;
 }
 
-// ==========================================
-// ALGORITMO DI BRESENHAM (LINE OF SIGHT)
-// ==========================================
 bool AGameField::HasLineOfSight(ATile* InStartTile, ATile* InTargetTile)
 {
 	if (!InStartTile || !InTargetTile) return false;
 
+	// Algorithm: Bresenham's Line Algorithm
+	// Used for rasterizing a line between two points on a 2D grid using integer arithmetic
 	int32 X0 = InStartTile->GetGridPosition().X;
 	int32 Y0 = InStartTile->GetGridPosition().Y;
 	int32 X1 = InTargetTile->GetGridPosition().X;
@@ -780,7 +714,7 @@ bool AGameField::HasLineOfSight(ATile* InStartTile, ATile* InTargetTile)
 
 	while (true)
 	{
-		// Escludiamo la cella di partenza e quella di arrivo dai controlli dell'ostacolo
+		// Exclude the starting and target tiles from the obstacle check
 		if ((X0 != InStartTile->GetGridPosition().X || Y0 != InStartTile->GetGridPosition().Y) &&
 			(X0 != InTargetTile->GetGridPosition().X || Y0 != InTargetTile->GetGridPosition().Y))
 		{
@@ -789,7 +723,7 @@ bool AGameField::HasLineOfSight(ATile* InStartTile, ATile* InTargetTile)
 			{
 				ATile* IntersectTile = *IntersectTilePtr;
 
-				// LA REGOLA MAGICA: Se incontriamo una montagna che è PIÙ ALTA dello Sniper, la visuale è bloccata!
+				// Elevation Rule: Line of sight is blocked by any tile higher than the attacker's tile
 				if (IntersectTile->Elevation > StartElevation)
 				{
 					return false;

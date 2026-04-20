@@ -6,10 +6,10 @@
 #include "Kismet/GameplayStatics.h"
 #include "Math/UnrealMathUtility.h"
 
-
 AStrategyUnit::AStrategyUnit()
 {
-	PrimaryActorTick.bCanEverTick = true; // Come da best practice, disattiviamo il Tick per risparmiare risorse
+	// Tick is enabled to allow smooth movement interpolation
+	PrimaryActorTick.bCanEverTick = true;
 
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);
@@ -17,7 +17,7 @@ AStrategyUnit::AStrategyUnit()
 	UnitMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("UnitMesh"));
 	UnitMesh->SetupAttachment(SceneRoot);
 
-	// Valori di Paracadute
+	// Default fallback values
 	UnitLogID = TEXT("U");
 	MovementRange = 0;
 	AttackType = EAttackType::MELEE;
@@ -35,34 +35,35 @@ AStrategyUnit::AStrategyUnit()
 void AStrategyUnit::BeginPlay()
 {
 	Super::BeginPlay();
-	CurrentHealth = MaxHealth; // All'avvio la vita è al massimo
+
+	// Initialize health to maximum upon spawning
+	CurrentHealth = MaxHealth;
 }
 
 int32 AStrategyUnit::CalculateDamageToDeal()
 {
-	// Estrae un danno randomico tra il minimo e il massimo
+	// Extract a random damage value between the class minimum and maximum
 	return FMath::RandRange(MinDamage, MaxDamage);
 }
 
 void AStrategyUnit::ReceiveDamage(int32 DamageAmount)
 {
 	CurrentHealth -= DamageAmount;
-	// Assicuriamoci che la vita non vada sotto lo zero
+
+	// Prevent health from dropping below zero
 	if (CurrentHealth < 0) CurrentHealth = 0;
 
-	// 1. AGGIORNIAMO LA BARRA DELLA VITA
+	// 1. Update the health bar UI
 	OnHealthChanged(CurrentHealth, MaxHealth);
 
-	// 2. CALCOLIAMO LA POSIZIONE E SPAWNIAMO IL TESTO FLUTTUANTE
+	// 2. Calculate position and spawn floating damage text
 	FVector DamageTextLocation = GetActorLocation() + FVector(0.0f, 0.0f, 150.0f);
 	OnShowFloatingDamage(DamageAmount, DamageTextLocation);
 
-	UE_LOG(LogTemp, Warning, TEXT("L'unità %s ha subito %d danni. Salute rimanente: %d"), *UnitLogID, DamageAmount, CurrentHealth);
-
+	// Handle unit defeat and respawn
 	if (CurrentHealth <= 0)
 	{
 		RespawnUnit();
-		UE_LOG(LogTemp, Warning, TEXT("L'unità %s è stata respawnata!"), *UnitLogID);
 	}
 }
 
@@ -83,7 +84,9 @@ void AStrategyUnit::Tick(float DeltaTime)
 	if (bIsMoving && PathToFollow.IsValidIndex(CurrentPathIndex))
 	{
 		FVector TargetLocation = PathToFollow[CurrentPathIndex];
-		TargetLocation.Z += 50.0f; // Offset per non sprofondare nella cella
+
+		// Z-offset to prevent the unit from clipping through the floor tile
+		TargetLocation.Z += 50.0f;
 
 		FVector NewLocation = FMath::VInterpConstantTo(GetActorLocation(), TargetLocation, DeltaTime, MoveSpeed);
 		SetActorLocation(NewLocation);
@@ -91,15 +94,13 @@ void AStrategyUnit::Tick(float DeltaTime)
 		if (FVector::Dist(GetActorLocation(), TargetLocation) < 10.0f)
 		{
 			SetActorLocation(TargetLocation);
-
 			CurrentPathIndex++;
 
+			// Movement sequence completed
 			if (CurrentPathIndex >= PathToFollow.Num())
 			{
 				bIsMoving = false;
 				bHasMoved = true;
-
-				UE_LOG(LogTemp, Warning, TEXT("Movimento terminato su X:%d Y:%d"), CurrentTile->GetGridPosition().X, CurrentTile->GetGridPosition().Y);
 
 				if (IsValid(GameFieldRef))
 				{
@@ -107,6 +108,7 @@ void AStrategyUnit::Tick(float DeltaTime)
 
 					if (this->UnitTeam == ETeam::Player)
 					{
+						// If no targets are in range, auto-finish the unit's turn
 						if (GameFieldRef->AttackableTiles.Num() == 0)
 						{
 							this->bHasAttacked = true;
@@ -118,6 +120,7 @@ void AStrategyUnit::Tick(float DeltaTime)
 					}
 					else
 					{
+						// AI Auto-Attack Logic
 						bool bAttacked = false;
 
 						for (ATile* TargetTile : GameFieldRef->AttackableTiles)
@@ -134,11 +137,6 @@ void AStrategyUnit::Tick(float DeltaTime)
 							}
 						}
 
-						if (!bAttacked)
-						{
-							UE_LOG(LogTemp, Warning, TEXT("IA: Nessun bersaglio a tiro per %s."), *this->UnitLogID);
-						}
-
 						this->bHasAttacked = true;
 						this->bIsTurnFinished = true;
 						GameFieldRef->ClearAttackableTiles();
@@ -146,6 +144,7 @@ void AStrategyUnit::Tick(float DeltaTime)
 						AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 						if (GM)
 						{
+							// Delay next AI action slightly for visual pacing
 							FTimerHandle WaitHandle;
 							GetWorld()->GetTimerManager().SetTimer(WaitHandle, GM, &AStrategyGameMode::ProcessAITurn, 1.0f, false);
 						}
@@ -158,8 +157,6 @@ void AStrategyUnit::Tick(float DeltaTime)
 
 void AStrategyUnit::ExecuteAITurn()
 {
-	UE_LOG(LogTemp, Warning, TEXT("IA: %s sta pensando col nuovo Algoritmo..."), *UnitLogID);
-
 	if (!IsValid(GameFieldRef))
 	{
 		bIsTurnFinished = true;
@@ -170,9 +167,7 @@ void AStrategyUnit::ExecuteAITurn()
 
 	ATile* TargetTile = nullptr;
 
-	// ==========================================
-	// 1. CERCA LA TORRE CON PRIORITA'
-	// ==========================================
+	// 1. SEARCH FOR HIGHEST PRIORITY TOWER
 	TArray<AActor*> AllTowers;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyTower::StaticClass(), AllTowers);
 
@@ -182,7 +177,8 @@ void AStrategyUnit::ExecuteAITurn()
 	for (AActor* Actor : AllTowers)
 	{
 		AStrategyTower* Tower = Cast<AStrategyTower>(Actor);
-		// Puntiamo la torre SOLO se non è già controllata da noi
+
+		// Ignore towers already controlled by the AI
 		if (Tower && Tower->CurrentState != ETowerState::ControlledAI)
 		{
 			float Dist = FVector::Dist(GetActorLocation(), Tower->GetActorLocation());
@@ -194,9 +190,7 @@ void AStrategyUnit::ExecuteAITurn()
 		}
 	}
 
-	// ==========================================
-	// 2. CERCA IL NEMICO PIU' VICINO
-	// ==========================================
+	// 2. SEARCH FOR CLOSEST ENEMY
 	AStrategyUnit* ClosestEnemy = nullptr;
 	float MinEnemyDist = 999999.0f;
 
@@ -217,13 +211,11 @@ void AStrategyUnit::ExecuteAITurn()
 		}
 	}
 
-	// ==========================================
-	// 3. IL CERVELLO: SCELTA DEL BERSAGLIO
-	// ==========================================
-	// Sottraiamo "1500" (circa 15 celle) alla distanza della torre per darle una priorità enorme!
+	// 3. BRAIN: TARGET SELECTION
+	// Apply a massive weight reduction to tower distance to prioritize objectives
 	if (BestTower && (MinTowerDist - 1500.0f) < MinEnemyDist)
 	{
-		// Abbiamo scelto la torre! Cerchiamo una cella CALPESTABILE nella sua Zona di Cattura (Raggio 2)
+		// Find a valid, walkable tile within the tower's capture radius (Range 2)
 		for (auto& Elem : GameFieldRef->TileMap)
 		{
 			ATile* T = Elem.Value;
@@ -235,19 +227,18 @@ void AStrategyUnit::ExecuteAITurn()
 				if (DistX <= 2 && DistY <= 2)
 				{
 					TargetTile = T;
-					UE_LOG(LogTemp, Warning, TEXT("IA: %s punta alla Torre in X:%d Y:%d"), *UnitLogID, BestTower->GridPosition.X, BestTower->GridPosition.Y);
 					break;
 				}
 			}
 		}
 	}
 
-	// Se non ha trovato una cella per la torre, punta il nemico con logiche diverse per classe
+	// If no valid tower tile is found, fallback to hunting the closest enemy
 	if (!TargetTile && ClosestEnemy)
 	{
 		if (this->AttackType == EAttackType::RANGED)
 		{
-			// --- CERVELLO DELLO SNIPER (A* PER L'ATTACCO) ---
+			// SNIPER BRAIN: Tactical positioning
 			ATile* BestSniperTile = nullptr;
 			int32 MinDistToSniper = 999999;
 
@@ -255,16 +246,15 @@ void AStrategyUnit::ExecuteAITurn()
 			{
 				ATile* T = Elem.Value;
 
-				// Cerca una cella libera (o quella in cui si trova già lo Sniper, se è già in posizione perfetta!)
 				if (T && T->bIsWalkable && T->Status != ETileStatus::OBSTACLE && (!IsValid(T->UnitOnTile) || T == this->CurrentTile))
 				{
 					int32 DistToEnemy = FMath::Abs(T->GetGridPosition().X - ClosestEnemy->CurrentTile->GetGridPosition().X) +
 						FMath::Abs(T->GetGridPosition().Y - ClosestEnemy->CurrentTile->GetGridPosition().Y);
 
-					// Regola 1 & 2: A tiro (<= AttackRange) E in posizione di vantaggio/pari livello
+					// Rule 1 & 2: Must be within AttackRange AND possess a height advantage or equal footing
 					if (DistToEnemy <= this->AttackRange && T->Elevation >= ClosestEnemy->CurrentTile->Elevation)
 					{
-						// Regola 3: Trova la più vicina allo Sniper per non sprecare turni di movimento
+						// Rule 3: Minimize movement distance to reach the firing position
 						int32 DistToSniper = FMath::Abs(T->GetGridPosition().X - this->CurrentTile->GetGridPosition().X) +
 							FMath::Abs(T->GetGridPosition().Y - this->CurrentTile->GetGridPosition().Y);
 
@@ -280,24 +270,21 @@ void AStrategyUnit::ExecuteAITurn()
 			if (BestSniperTile)
 			{
 				TargetTile = BestSniperTile;
-				UE_LOG(LogTemp, Warning, TEXT("IA: Lo Sniper %s cerca l'appostamento in X:%d Y:%d"), *UnitLogID, TargetTile->GetGridPosition().X, TargetTile->GetGridPosition().Y);
 			}
 			else
 			{
-				// Paracadute: se il nemico è sulla montagna più alta e non c'è spazio, vacci vicino
+				// Fallback: If no clear shot is available, move towards the enemy
 				TargetTile = ClosestEnemy->CurrentTile;
 			}
 		}
 		else
 		{
-			// --- CERVELLO DEL BRAWLER ---
-			// Il Brawler è corpo a corpo, deve andare dritto in faccia al nemico
+			// BRAWLER BRAIN: Direct confrontation
 			TargetTile = ClosestEnemy->CurrentTile;
-			UE_LOG(LogTemp, Warning, TEXT("IA: Il Brawler %s punta dritto al nemico %s"), *UnitLogID, *ClosestEnemy->UnitLogID);
 		}
 	}
 
-	// Paracadute di sicurezza finale
+	// Absolute fallback: End turn if completely trapped
 	if (!TargetTile)
 	{
 		bHasMovedThisTurn = true; bHasAttacked = true; bIsTurnFinished = true;
@@ -306,22 +293,16 @@ void AStrategyUnit::ExecuteAITurn()
 		return;
 	}
 
-	// ==========================================
-	// 4. LANCIO DELL'ALGORITMO (SCELTO DAL PLAYER)
-	// ==========================================
+	// 4. ALGORITHM EXECUTION
 	TArray<ATile*> TargetPath;
-
-	// Leggiamo la scelta dal GameMode!
 	AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 
 	if (GM && GM->ActiveAIAlgorithm == EAIAlgorithm::Greedy)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("IA: %s usa GREEDY BEST-FIRST!"), *UnitLogID);
 		TargetPath = GameFieldRef->FindPathGreedy(CurrentTile, TargetTile);
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("IA: %s usa A*!"), *UnitLogID);
 		TargetPath = GameFieldRef->FindPathAStar(CurrentTile, TargetTile);
 	}
 
@@ -330,7 +311,7 @@ void AStrategyUnit::ExecuteAITurn()
 
 	GameFieldRef->ClearHighlightedTiles();
 
-	// Scorriamo TargetPath (che conterrà o A* o Greedy)
+	// Traverse the generated path and stop at the limit of the unit's MovementRange
 	for (ATile* StepTile : TargetPath)
 	{
 		if (ClosestEnemy && StepTile == ClosestEnemy->CurrentTile) break;
@@ -342,7 +323,8 @@ void AStrategyUnit::ExecuteAITurn()
 			AccumulatedCost += StepCost;
 			AIBestTargetTile = StepTile;
 
-			StepTile->OnSelectionChanged(true,true);
+			// Highlight the AI path with the specific AI visual flag
+			StepTile->OnSelectionChanged(true, true);
 			GameFieldRef->HighlightedTiles.Add(StepTile);
 		}
 		else
@@ -351,6 +333,7 @@ void AStrategyUnit::ExecuteAITurn()
 		}
 	}
 
+	// Delay physical movement to allow the player to see the intended path
 	GetWorld()->GetTimerManager().SetTimer(AIThinkTimerHandle, this, &AStrategyUnit::ExecuteAIMovement, 1.5f, false);
 }
 
@@ -362,7 +345,7 @@ void AStrategyUnit::ExecuteAIMovement()
 
 	if (AIBestTargetTile != CurrentTile)
 	{
-		// SALVIAMO LA CELLA DI PARTENZA PRIMA DI MUOVERCI!
+		// Cache starting tile for the combat log
 		ATile* StartingTile = CurrentTile;
 
 		for (auto& Pair : GameFieldRef->TileMap)
@@ -371,15 +354,13 @@ void AStrategyUnit::ExecuteAIMovement()
 		}
 
 		AIBestTargetTile->UnitOnTile = this;
-		CurrentTile = AIBestTargetTile; // Ora possiamo aggiornarla
+		CurrentTile = AIBestTargetTile;
 
 		TArray<FVector> Path = GameFieldRef->GetPathToTile(AIBestTargetTile);
 		StartMoving(Path);
 		bHasMovedThisTurn = true;
 
-		// ==========================================
-		// LOG DI MOVIMENTO IA FORMATTATO (Requisito 9)
-		// ==========================================
+		// FORMATTED AI MOVEMENT LOG (Requirement 9)
 		AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 		if (GM && StartingTile)
 		{
@@ -388,7 +369,6 @@ void AStrategyUnit::ExecuteAIMovement()
 			char StartLetter = 'A' + StartingTile->GetGridPosition().Y;
 			char EndLetter = 'A' + AIBestTargetTile->GetGridPosition().Y;
 
-			// Formato richiesto (es. "AI: B A0 -> B2")
 			FString MoveMsg = FString::Printf(TEXT("AI: %s %c%d -> %c%d"), *UnitInitial, StartLetter, StartingTile->GetGridPosition().X, EndLetter, AIBestTargetTile->GetGridPosition().X);
 
 			GM->AddGameLog(MoveMsg);
@@ -406,8 +386,6 @@ void AStrategyUnit::ExecuteAIMovement()
 
 void AStrategyUnit::RespawnUnit()
 {
-	UE_LOG(LogTemp, Warning, TEXT("L'unita' %s e' stata sconfitta e torna alla base!"), *UnitLogID);
-
 	if (CurrentTile && CurrentTile->UnitOnTile == this)
 	{
 		CurrentTile->UnitOnTile = nullptr;
@@ -443,6 +421,7 @@ void AStrategyUnit::InitializeUnit(const FString& InUnitLogID, ETeam InUnitTeam,
 
 	SetActorRotation(FRotator(0.0f, InInitialYaw, 0.0f));
 
+	// Apply faction specific materials
 	if (UnitMesh)
 	{
 		UMaterialInterface* MatToUse = nullptr;
@@ -470,45 +449,36 @@ void AStrategyUnit::InitializeUnit(const FString& InUnitLogID, ETeam InUnitTeam,
 	OnHealthChanged(CurrentHealth, MaxHealth);
 }
 
-// =========================================================
-// ECCO LA FUNZIONE CHE MANCAVA!
-// =========================================================
 void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
 {
 	if (!IsValid(TargetUnit) || !IsValid(this->CurrentTile) || !IsValid(TargetUnit->CurrentTile)) return;
 
-	// 1. Calcola e infligge il danno base
+	// 1. Calculate and apply base damage
 	int32 Damage = CalculateDamageToDeal();
 	TargetUnit->ReceiveDamage(Damage);
 
-	// ==========================================
-	// LOG DI ATTACCO FORMATTATO (Requisito 9)
-	// ==========================================
+	// FORMATTED COMBAT LOG (Requirement 9)
 	AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 	if (GM && TargetUnit && TargetUnit->CurrentTile)
 	{
-		// 1. Identificativo Player: "HP" per il Giocatore, "AI" per il computer
 		FString TeamID = (this->UnitTeam == ETeam::Player) ? TEXT("HP") : TEXT("AI");
-
-		// 2. Identificativo Unità: "S" per Sniper, "B" per Brawler
 		FString UnitInitial = (this->AttackType == EAttackType::RANGED) ? TEXT("S") : TEXT("B");
 
-		// 3. Calcolo della Cella Bersaglio (Lettera Y, Numero X)
 		char TargetLetter = 'A' + TargetUnit->CurrentTile->GetGridPosition().Y;
 		int32 TargetNumber = TargetUnit->CurrentTile->GetGridPosition().X;
 
-		// 4. Creazione della stringa finale: forza il prefisso "ATK:"
 		FString AttackMsg = FString::Printf(TEXT("ATK: %s Attack %c%d (-%d HP)"), *UnitInitial, TargetLetter, TargetNumber, Damage);
 		GM->AddGameLog(AttackMsg);
 	}
 
-	// 2. REGOLE DEL CONTRATTACCO 
+	// 2. COUNTER-ATTACK RULES
 	if (this->AttackType == EAttackType::RANGED)
 	{
 		int32 DistX = FMath::Abs(this->CurrentTile->GetGridPosition().X - TargetUnit->CurrentTile->GetGridPosition().X);
 		int32 DistY = FMath::Abs(this->CurrentTile->GetGridPosition().Y - TargetUnit->CurrentTile->GetGridPosition().Y);
 		int32 Distance = DistX + DistY;
 
+		// Snipe counter-attack conditions: Target is a sniper, or target is a brawler at range 1
 		bool bTargetIsSniper = (TargetUnit->AttackType == EAttackType::RANGED);
 		bool bTargetIsBrawlerAtRange1 = (TargetUnit->AttackType == EAttackType::MELEE && Distance == 1);
 
@@ -517,9 +487,9 @@ void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
 			int32 CounterDamage = FMath::RandRange(1, 3);
 			this->ReceiveDamage(CounterDamage);
 
-			// Log a schermo del contrattacco (Arancione)
+			// On-screen debug alert for the counter-attack
 			if (GEngine) {
-				GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Orange, FString::Printf(TEXT("CONTRATTACCO! %s subisce %d danni di riflesso!"), *this->UnitLogID, CounterDamage));
+				GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Orange, FString::Printf(TEXT("COUNTER-ATTACK! %s takes %d reflect damage!"), *this->UnitLogID, CounterDamage));
 			}
 		}
 	}

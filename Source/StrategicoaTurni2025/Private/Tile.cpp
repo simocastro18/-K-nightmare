@@ -1,34 +1,34 @@
-#include "Tile.h" // FONDAMENTALE: permette al GameField di vedere le funzioni di ATile
+#include "Tile.h" 
 #include "Math/UnrealMathUtility.h"
-#include "Engine/World.h" // Per GetWorld() e SpawnActor
+#include "Engine/World.h" 
 #include "Kismet/GameplayStatics.h"
 #include "StrategyPlayerController.h"
 
-// Costruttore: inizializziamo i componenti
 ATile::ATile()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	// Creiamo la radice della scena
+	// Initialize the root scene component
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);
 
-	// Creiamo la mesh statica e la attacchiamo alla radice
+	// Initialize and attach the main physical mesh
 	TileMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TileMesh"));
 	TileMesh->SetupAttachment(SceneRoot);
 
+	// Initialize the visual highlight mesh for pathing and disable collisions
 	PathMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PathMesh"));
 	PathMesh->SetupAttachment(SceneRoot);
 	PathMesh->SetVisibility(false);
-	// NUOVO: Disattiva completamente le collisioni!
 	PathMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
+	// Initialize the visual highlight mesh for combat targeting and disable collisions
 	AttackMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("AttackMesh"));
 	AttackMesh->SetupAttachment(SceneRoot);
 	AttackMesh->SetVisibility(false);
-	// NUOVO: Disattiva completamente le collisioni!
 	AttackMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
+	// Default tile properties
 	Status = ETileStatus::EMPTY;
 	PlayerOwner = -1;
 	Elevation = 0;
@@ -40,22 +40,15 @@ ATile::ATile()
 void ATile::BeginPlay()
 {
 	Super::BeginPlay();
-	//per debug
-	/*if (AttackMesh)
-	{
-		AttackMesh->SetVisibility(true);
-	}
-	*/ 
 }
 
-// 2. LOGICA DEL MOUSE - HOVER E CLICK
 void ATile::NotifyActorBeginCursorOver()
 {
 	Super::NotifyActorBeginCursorOver();
-	// Quando il mouse passa sopra, accendi la luce azzurra (Player)
+
+	// Enable player highlight path on mouse hover if not locked by active selection
 	if (!bIsCurrentlySelected && PathMesh)
 	{
-		// Applica il materiale del Player prima di accendere
 		if (PlayerPathMaterial)
 		{
 			PathMesh->SetMaterial(0, PlayerPathMaterial);
@@ -67,31 +60,23 @@ void ATile::NotifyActorBeginCursorOver()
 void ATile::NotifyActorEndCursorOver()
 {
 	Super::NotifyActorEndCursorOver();
-	// Quando il mouse esce, spegnila
+
+	// Disable highlight on mouse exit if not locked by active selection
 	if (!bIsCurrentlySelected && PathMesh)
 	{
 		PathMesh->SetVisibility(false);
 	}
 }
-/*
-void ATile::NotifyActorOnClicked(FKey ButtonPressed)
-{
-	Super::NotifyActorOnClicked(ButtonPressed);
 
-	// [DA COMPLETARE] Qui dentro chiami il tuo Controller come facevi nel Blueprint (Screenshot 1).
-	// Esempio:
-	// AStrategyPlayerController* PC = Cast<AStrategyPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0));
-	// if (PC) { PC->ProcessTileClick(this); }
-}
-*/
 void ATile::OnSelectionChanged(bool bIsSelected, bool bIsAI)
 {
 	bIsCurrentlySelected = bIsSelected;
+
 	if (PathMesh)
 	{
 		if (bIsSelected)
 		{
-			// Cambia il materiale in base a chi sta calcolando il percorso
+			// Apply the appropriate material depending on which entity is evaluating the path
 			if (bIsAI && AIPathMaterial)
 			{
 				PathMesh->SetMaterial(0, AIPathMaterial);
@@ -105,7 +90,6 @@ void ATile::OnSelectionChanged(bool bIsSelected, bool bIsAI)
 	}
 }
 
-
 void ATile::UpdateAttackHighlight(bool bIsHighlighted)
 {
 	if (AttackMesh)
@@ -114,20 +98,19 @@ void ATile::UpdateAttackHighlight(bool bIsHighlighted)
 	}
 }
 
-
 void ATile::SetTileStatus(int32 NewOwner, ETileStatus NewStatus)
 {
 	PlayerOwner = NewOwner;
 	Status = NewStatus;
 }
 
-void ATile::SetGridPosition(int32 InX, int32 InY) // AGGIORNATO
+void ATile::SetGridPosition(int32 InX, int32 InY)
 {
 	TileGridPosition.X = InX;
 	TileGridPosition.Y = InY;
 }
 
-FIntPoint ATile::GetGridPosition() const // AGGIORNATO
+FIntPoint ATile::GetGridPosition() const
 {
 	return TileGridPosition;
 }
@@ -141,7 +124,7 @@ void ATile::UpdateTileColor()
 {
 	if (!TileMesh) return;
 
-	// Creiamo il materiale dinamico solo la prima volta
+	// Instantiate the dynamic material only once to optimize performance
 	if (!DynamicMaterial)
 	{
 		DynamicMaterial = TileMesh->CreateDynamicMaterialInstance(0);
@@ -151,18 +134,18 @@ void ATile::UpdateTileColor()
 	{
 		FLinearColor TileColor;
 
-		// Assegnazione colori in base all'Elevation (come nel tuo Blueprint)
+		// Assign tile color based on its procedural elevation level
 		switch (Elevation)
 		{
-		case 0: TileColor = FLinearColor::Blue; break;       // Ostacolo / Acqua
-		case 1: TileColor = FLinearColor::Green; break;      // Erba
-		case 2: TileColor = FLinearColor(0.8f, 0.8f, 0.0f); break; // Giallo
-		case 3: TileColor = FLinearColor(1.0f, 0.3f, 0.0f); break;// Arancione
-		case 4: TileColor = FLinearColor::Red; break;      // Rosso
+		case 0: TileColor = FLinearColor::Blue; break;               // Level 0: Water (Obstacle)
+		case 1: TileColor = FLinearColor::Green; break;              // Level 1: Flat Ground
+		case 2: TileColor = FLinearColor(0.8f, 0.8f, 0.0f); break;   // Level 2: Low Elevation (Yellow)
+		case 3: TileColor = FLinearColor(1.0f, 0.3f, 0.0f); break;   // Level 3: Medium Elevation (Orange)
+		case 4: TileColor = FLinearColor::Red; break;                // Level 4: High Mountain (Red)
 		default: TileColor = FLinearColor::Black; break;
 		}
 
-		// Inviamo il colore al Materiale
+		// Push the calculated color to the shader parameter
 		DynamicMaterial->SetVectorParameterValue(TEXT("Color"), TileColor);
 	}
 }

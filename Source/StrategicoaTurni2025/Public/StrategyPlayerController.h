@@ -3,11 +3,14 @@
 #include "CoreMinimal.h"
 #include "InputActionValue.h"
 #include "GameFramework/PlayerController.h"
-
-class ATile;
-class AStrategyUnit; // Diciamo al compilatore che esiste questa classe
-
 #include "StrategyPlayerController.generated.h"
+
+// FORWARD DECLARATIONS 
+class ATile;
+class AStrategyUnit;
+class AGameField;
+class UInputMappingContext;
+class UInputAction;
 
 UCLASS()
 class STRATEGICOATURNI2025_API AStrategyPlayerController : public APlayerController
@@ -15,44 +18,56 @@ class STRATEGICOATURNI2025_API AStrategyPlayerController : public APlayerControl
 	GENERATED_BODY()
 
 public:
+
+	// Grid Interaction 
+
+	// Processes the logical consequence of clicking a specific tile on the grid
 	UFUNCTION(BlueprintCallable, Category = "Grid Logic")
 	void HandleTileClick(ATile* ClickedTile);
 
-	UPROPERTY(BlueprintReadWrite, Category = "Grid Logic")
-	ATile* CurrentSelectedTile;
-
-	// CAMBIATO: Ora è specifico per le nostre unità!
-	UPROPERTY(BlueprintReadWrite, Category = "Grid Logic")
-	AStrategyUnit* SelectedUnit;
-
-	// Riferimento al GameField (ci servirà a breve per far calcolare i percorsi matematici)
-	UPROPERTY(BlueprintReadWrite, Category = "Grid Logic")
-	class AGameField* GameFieldRef;
-
-	// La funzione esposta al Blueprint che fa partire il raggio
+	// Triggers a raycast from the mouse cursor to interact with the 3D world
 	UFUNCTION(BlueprintCallable, Category = "Grid Logic")
 	void ExecuteClick();
 
-	// Il nostro Contesto di Mapping (L'interruttore generale)
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	class UInputMappingContext* DefaultMappingContext;
+	// Currently selected tile by the player
+	UPROPERTY(BlueprintReadWrite, Category = "Grid Logic")
+	ATile* CurrentSelectedTile;
 
-	// La nostra Azione di Click
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-	class UInputAction* ClickAction;
+	// Currently selected unit by the player, used to execute movement or attack commands
+	UPROPERTY(BlueprintReadWrite, Category = "Grid Logic")
+	AStrategyUnit* SelectedUnit;
 
-	// L'unità pronta per essere piazzata
+	// Reference to the main grid manager for pathfinding and attack range calculations
+	UPROPERTY(BlueprintReadWrite, Category = "Grid Logic")
+	AGameField* GameFieldRef;
+
+	// Input System (Enhanced Input)
+
+	// The base mapping context containing the control scheme
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputMappingContext* DefaultMappingContext;
+
+	// The specific input action bound to the primary mouse click
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* ClickAction;
+
+	// Deployment Phase 
+
+	// The blueprint class of the unit the player is currently holding to place on the grid
 	UPROPERTY(BlueprintReadWrite, Category = "Deployment")
-	TSubclassOf<class AActor> ClassToSpawn;
+	TSubclassOf<AActor> ClassToSpawn;
 
+	// Tracks if the player has successfully deployed their Brawler unit
 	UPROPERTY(BlueprintReadWrite, Category = "Deployment")
 	bool bBrawlerPlaced = false;
 
+	// Tracks if the player has successfully deployed their Sniper unit
 	UPROPERTY(BlueprintReadWrite, Category = "Deployment")
 	bool bSniperPlaced = false;
 
 protected:
 	virtual void BeginPlay() override;
-	// Funzione nativa di Unreal per legare i tasti alle funzioni
+
+	// Binds specific Input Actions to C++ functions at runtime
 	virtual void SetupInputComponent() override;
 };

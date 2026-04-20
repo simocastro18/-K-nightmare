@@ -2,14 +2,14 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
-#include "StrategyUnit.h" // Ci serve solo questo per l'Enum ETeam
+#include "StrategyUnit.h" // Required for the ETeam enum
 #include "StrategyGameMode.generated.h"
 
-// --- FORWARD DECLARATIONS (Il trucco per evitare dipendenze circolari) ---
+// Used to prevent circular dependencies between header files
 class AGameField;
 class UUserWidget;
 
-// --- NUOVO ENUM PER LA SCELTA DELL'ALGORITMO ---
+// Defines the pathfinding algorithm utilized by the AI during the match.
 UENUM(BlueprintType)
 enum class EAIAlgorithm : uint8
 {
@@ -17,7 +17,7 @@ enum class EAIAlgorithm : uint8
 	Greedy UMETA(DisplayName = "Greedy")
 };
 
-// --- STRUTTURA CONFIGURAZIONE ---
+// Configuration struct passed from the main menu to initialize the match settings.
 USTRUCT(BlueprintType)
 struct FGameConfig
 {
@@ -36,15 +36,16 @@ struct FGameConfig
 	EAIAlgorithm SelectedAIAlgorithm = EAIAlgorithm::AStar;
 };
 
-// --- STATI DEL TURNO ---
+// Represents the current phase of the core game loop.
 UENUM(BlueprintType)
 enum class ETurnState : uint8
 {
-	Deployment UMETA(DisplayName = "Fase di Schieramento"),
-	PlayerTurn UMETA(DisplayName = "Turno Giocatore"),
-	AITurn     UMETA(DisplayName = "Turno AI")
+	Deployment UMETA(DisplayName = "Deployment Phase"),
+	PlayerTurn UMETA(DisplayName = "Player Turn"),
+	AITurn     UMETA(DisplayName = "AI Turn")
 };
 
+// Delegate used to broadcast game events and combat actions to the UI Log Widget
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGameLogAdded, const FString&, LogMessage);
 
 UCLASS()
@@ -60,33 +61,38 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UUserWidget> LoseWidgetClass;
 
+	// Halts gameplay and displays the appropriate victory or defeat screen.
 	void HandleGameOver(ETeam Winner);
 
+	// Reloads the current level to start a new match.
 	UFUNCTION(BlueprintCallable, Category = "Game Flow")
 	void RestartGame();
 
+	// Initializes the map and the game rules based on the user's menu selection.
 	UFUNCTION(BlueprintCallable, Category = "Game Flow")
 	void StartGameWithConfig(FGameConfig Config);
 
-	// Usiamo il puntatore alla Forward Declaration
+	// Reference to the grid generator and spatial manager
 	UPROPERTY(BlueprintReadOnly, Category = "Game Flow")
 	AGameField* MapGenerator;
 
+	// Concludes the current player's or AI's turn and passes control to the opponent.
 	UFUNCTION(BlueprintCallable, Category = "Game Flow")
 	void EndTurn();
 
 	ETurnState GetCurrentTurnState() const { return CurrentTurnState; }
 
+	// Verifies if the active team has any units left that can perform an action.
 	void CheckRemainingMoves();
 
+	// Analyzes tower capture zones and updates dominance counters for win conditions.
 	UFUNCTION(BlueprintCallable, Category = "Game Flow")
-
 	void EvaluateTowers();
 
+	// Triggers the execution sequence for the enemy units.
 	UFUNCTION(BlueprintCallable, Category = "AI")
 	void ProcessAITurn();
 
-	// --- SISTEMA DI VITTORIA ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
 	int32 PlayerDominanceTurns = 0;
 
@@ -105,10 +111,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "UI Log")
 	FOnGameLogAdded OnGameLogAdded;
 
+	// Formats and pushes a new string to the UI Combat Log.
 	UFUNCTION(BlueprintCallable, Category = "UI Log")
 	void AddGameLog(const FString& Message);
 
-	// --- STATO DELLA PARTITA ---
 	UPROPERTY(BlueprintReadOnly, Category = "Game State")
 	int32 PlayerTowers = 0;
 
@@ -118,14 +124,14 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Game State")
 	int32 CurrentTurnNumber = 1;
 
-	// --- HELPER GRIGLIA ---
+	// Converts raw Grid (X,Y) coordinates into a readable format (e.g., "A5").
 	UFUNCTION(BlueprintPure, Category = "Grid Logic")
 	static FString GetCellCoordinateName(int32 X, int32 Y);
 
+	// Retrieves the alphabet letter corresponding to the Y axis index.
 	UFUNCTION(BlueprintPure, Category = "Grid Logic")
 	static FString GetGridLetter(int32 Index);
 
-	// --- VARIABILI SCHIERAMENTO ---
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Deployment")
 	int32 PlayerUnitsPlaced = 0;
 
@@ -138,13 +144,15 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Deployment")
 	ETeam FirstTurnWinner;
 
+	// Executes a 50/50 RNG check to determine which team deploys the first unit.
 	UFUNCTION(BlueprintCallable, Category = "Deployment")
 	void StartCoinFlipAndDeployment();
 
+	// Manages the alternating logic for placing units on the grid.
 	UFUNCTION(BlueprintCallable, Category = "Deployment")
 	void AdvanceDeployment();
 
-	// --- ALGORITMO IA GLOBALE ---
+	// Global setting determining the active pathfinding heuristic for enemy units
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
 	EAIAlgorithm ActiveAIAlgorithm = EAIAlgorithm::AStar;
 
@@ -153,4 +161,5 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
 	ETurnState CurrentTurnState = ETurnState::PlayerTurn;
+
 };

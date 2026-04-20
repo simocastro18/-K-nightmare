@@ -6,7 +6,7 @@ AStrategyTower::AStrategyTower()
 	PrimaryActorTick.bCanEverTick = false;
 	CurrentState = ETowerState::Neutral;
 
-	// Creazione della Mesh (se non l'avevi già creata)
+	// Initialize the physical mesh component
 	TowerMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TowerMesh"));
 	SetRootComponent(TowerMesh);
 }
@@ -15,7 +15,7 @@ void AStrategyTower::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Appena la partita inizia, applica il colore dello stato attuale (Neutrale)
+	// Apply the default neutral visual state at the start of the match
 	UpdateTowerVisuals(CurrentState);
 }
 
@@ -24,16 +24,15 @@ void AStrategyTower::UpdateTowerVisuals(ETowerState NewState)
 	UMaterialInterface* MatToUse = nullptr;
 	FString TowerMsg = TEXT("");
 
-	// Ricaviamo la lettera e il numero della torre (usando la tua variabile GridPosition)
+	// Extract grid coordinates to format the UI log message
 	char ColLetter = 'A' + GridPosition.Y;
 	int32 RowNum = GridPosition.X;
 
-	// Scegliamo il materiale e prepariamo il messaggio in base allo stato
+	// Determine the correct material and log message based on the new state
 	switch (NewState)
 	{
 	case ETowerState::Neutral:
 		MatToUse = NeutralMaterial;
-		// Nessun log per quando è neutrale (inizio partita)
 		break;
 	case ETowerState::ControlledPlayer:
 		MatToUse = PlayerMaterial;
@@ -49,7 +48,7 @@ void AStrategyTower::UpdateTowerVisuals(ETowerState NewState)
 		break;
 	}
 
-	// 1. Aggiorniamo i Colori
+	// Apply the selected material to all material slots on the mesh
 	if (MatToUse != nullptr && TowerMesh != nullptr)
 	{
 		int32 NumMaterials = TowerMesh->GetNumMaterials();
@@ -59,11 +58,9 @@ void AStrategyTower::UpdateTowerVisuals(ETowerState NewState)
 		}
 	}
 
-	// 2. SPARIAMO IL LOG
+	// Broadcast the state change to the GameMode for the UI Combat Log
 	if (!TowerMsg.IsEmpty())
 	{
-		// ---> AGGIUNGI QUESTA RIGA <---
-		UE_LOG(LogTemp, Warning, TEXT("TENTATIVO DI INVIO LOG TORRE: %s"), *TowerMsg);
 		AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 		if (GM)
 		{
@@ -71,12 +68,3 @@ void AStrategyTower::UpdateTowerVisuals(ETowerState NewState)
 		}
 	}
 }
-
-/*
-Vecchio BP
-AStrategyTower::AStrategyTower()
-{
-	PrimaryActorTick.bCanEverTick = false;
-	CurrentState = ETowerState::Neutral; // Stato Iniziale 
-}
-*/

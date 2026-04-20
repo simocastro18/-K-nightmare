@@ -1,16 +1,14 @@
 #include "StrategyGameMode.h"
-#include "GameField.h"            // <--- AGGIUNGI QUESTA RIGA!
+#include "GameField.h"
 #include "Kismet/GameplayStatics.h"
 #include "StrategyTower.h"
 #include "StrategyUnit.h"
 #include "Tile.h"
-#include "Blueprint/UserWidget.h" // Serve per gestire i Widget
+#include "Blueprint/UserWidget.h"
 
 void AStrategyGameMode::BeginPlay()
 {
 	Super::BeginPlay();
-	//CurrentTurnState = ETurnState::PlayerTurn;
-	//UE_LOG(LogTemp, Warning, TEXT("=== INIZIO PARTITA: TURNO DEL GIOCATORE ==="));
 
 	AActor* FoundField = UGameplayStatics::GetActorOfClass(GetWorld(), AGameField::StaticClass());
 	if (FoundField)
@@ -21,22 +19,24 @@ void AStrategyGameMode::BeginPlay()
 
 void AStrategyGameMode::HandleGameOver(ETeam Winner)
 {
-	bIsGameOver = true; // ATTIVAZIONE KILL SWITCH
+	// Activate kill switch to prevent further actions
+	bIsGameOver = true;
+
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	if (!PC) return;
 
-	// 1. Scegliamo quale widget creare
+	// Select the appropriate widget based on the winner
 	TSubclassOf<UUserWidget> WidgetToCreate = (Winner == ETeam::Player) ? WinWidgetClass : LoseWidgetClass;
 
 	if (WidgetToCreate)
 	{
-		// 2. Creiamo il widget
+		// Create and display the widget
 		UUserWidget* GameOverWidget = CreateWidget<UUserWidget>(GetWorld(), WidgetToCreate);
 		if (GameOverWidget)
 		{
 			GameOverWidget->AddToViewport();
 
-			// 3. Impostiamo l'input mode (Blocca il gioco, sblocca il mouse)
+			// Lock game input and release the mouse cursor to the UI
 			FInputModeUIOnly InputMode;
 			InputMode.SetWidgetToFocus(GameOverWidget->TakeWidget());
 			PC->SetInputMode(InputMode);
@@ -48,7 +48,7 @@ void AStrategyGameMode::HandleGameOver(ETeam Winner)
 
 void AStrategyGameMode::RestartGame()
 {
-	// Prende il nome del livello attuale e lo ricarica
+	// Retrieve the current level name and reload it
 	FString CurrentLevelName = GetWorld()->GetMapName();
 	CurrentLevelName.RemoveFromStart(GetWorld()->StreamingLevelsPrefix);
 
@@ -66,16 +66,18 @@ void AStrategyGameMode::StartGameWithConfig(FGameConfig Config)
 		MapGenerator->GridSizeY = Config.GridSizeY;
 
 		MapGenerator->GenerateGridData();
-		MapGenerator->SpawnInitialEntities(); // Ora spawnerà solo le torri
+		MapGenerator->SpawnInitialEntities();
 	}
 
 	CurrentTurnState = ETurnState::Deployment;
-	StartCoinFlipAndDeployment(); // LANCIO DELLA MONETA PRIMA DELLO SCHIERAMENTO!
+
+	// Initiate the coin flip to decide who deploys first
+	StartCoinFlipAndDeployment();
 }
 
 void AStrategyGameMode::StartCoinFlipAndDeployment()
 {
-	// 3. Viene effettuato il lancio di una moneta.
+	// 50/50 chance to decide the first player
 	if (FMath::RandBool())
 	{
 		FirstTurnWinner = ETeam::Player;
@@ -94,16 +96,16 @@ void AStrategyGameMode::StartCoinFlipAndDeployment()
 
 void AStrategyGameMode::AdvanceDeployment()
 {
-	// Controlliamo se tutti hanno piazzato le loro 2 unità
+	// Check if both teams have placed all their units
 	if (PlayerUnitsPlaced >= 2 && AIUnitsPlaced >= 2)
 	{
 		AddGameLog(TEXT("Deployment completed!"));
 
-		// Sblocchiamo il mouse al 100%
+		// Restore full game and UI input to the player
 		APlayerController* PC = GetWorld()->GetFirstPlayerController();
 		if (PC) { PC->SetInputMode(FInputModeGameAndUI()); }
 
-		// 7. Il vincitore del lancio esegue il primo turno.
+		// The winner of the coin flip takes the first turn
 		if (FirstTurnWinner == ETeam::Player)
 		{
 			CurrentTurnState = ETurnState::PlayerTurn;
@@ -120,18 +122,19 @@ void AStrategyGameMode::AdvanceDeployment()
 
 	if (bPlayerDeploysNext)
 	{
-		// Aspettiamo che il Player usi l'interfaccia WBP_Deployment
-		UE_LOG(LogTemp, Warning, TEXT("Tocca al Player piazzare un'unita'."));
+		// Wait for the player to use the deployment UI
 	}
 	else
 	{
-		// Tocca all'IA piazzare
+		// Trigger AI deployment
 		if (MapGenerator)
 		{
 			MapGenerator->SpawnSingleAIUnit(AIUnitsPlaced);
 			AIUnitsPlaced++;
-			bPlayerDeploysNext = true; // Passa la palla al giocatore
-			AdvanceDeployment();       // Ricalcola lo stato
+
+			// Pass the turn back to the player and re-evaluate the deployment state
+			bPlayerDeploysNext = true;
+			AdvanceDeployment();
 		}
 	}
 }
@@ -184,21 +187,17 @@ void AStrategyGameMode::EndTurn()
 	if (CurrentTurnState == ETurnState::PlayerTurn)
 	{
 		CurrentTurnState = ETurnState::AITurn;
-		UE_LOG(LogTemp, Warning, TEXT("=== TURNO DELL'INTELLIGENZA ARTIFICIALE ==="));
-		// Invece di saltare, chiamiamo il primo nemico!
+		// Trigger the first available enemy unit
 		GetWorldTimerManager().SetTimerForNextTick(this, &AStrategyGameMode::ProcessAITurn);
 	}
 	else
 	{
 		CurrentTurnState = ETurnState::PlayerTurn;
-		UE_LOG(LogTemp, Warning, TEXT("=== NUOVO ROUND: TURNO DEL GIOCATORE ==="));
-
-		// FIX: Il turno aumenta SOLO quando ricomincia il round completo!
+		// Increment the turn number only when a full round is completed
 		CurrentTurnNumber++;
 	}
 }
 
-// IL MOTORE DELL'IA
 void AStrategyGameMode::ProcessAITurn()
 {
 	TArray<AActor*> AllUnits;
@@ -206,7 +205,7 @@ void AStrategyGameMode::ProcessAITurn()
 
 	AStrategyUnit* NextAIUnit = nullptr;
 
-	// Cerchiamo il primo nemico che non ha ancora agito
+	// Find the first AI unit that hasn't acted yet
 	for (AActor* Actor : AllUnits)
 	{
 		AStrategyUnit* Unit = Cast<AStrategyUnit>(Actor);
@@ -219,12 +218,12 @@ void AStrategyGameMode::ProcessAITurn()
 
 	if (NextAIUnit)
 	{
-		// Trovato! Gli diciamo di giocare il suo turno
+		// Execute the turn for the found unit
 		NextAIUnit->ExecuteAITurn();
 	}
 	else
 	{
-		// Tutti i nemici hanno finito, torna al Player
+		// All AI units have finished, end the AI turn
 		EndTurn();
 	}
 }
@@ -274,20 +273,13 @@ void AStrategyGameMode::EvaluateTowers()
 		if (OldState != Tower->CurrentState)
 		{
 			Tower->UpdateTowerVisuals(Tower->CurrentState);
-			UE_LOG(LogTemp, Warning, TEXT("Torre X:%d Y:%d ha cambiato stato!"), Tower->GridPosition.X, Tower->GridPosition.Y);
 		}
 
 		if (Tower->CurrentState == ETowerState::ControlledPlayer) PlayerTowerCount++;
 		else if (Tower->CurrentState == ETowerState::ControlledAI) AITowerCount++;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("Punteggio Torri -> Player: %d | AI: %d"), PlayerTowerCount, AITowerCount);
-
-	// =========================================================
-	// CONTROLLO VITTORIA (Logica a 4 mezzi-turni consecutivi)
-	// =========================================================
-
-	// 1. Azzeriamo preventivamente la streak se non si hanno 2 torri
+	// Reset dominance streak if the required 2 towers are not held
 	if (PlayerTowerCount < 2)
 	{
 		PlayerDominanceTurns = 0;
@@ -297,16 +289,15 @@ void AStrategyGameMode::EvaluateTowers()
 		AIDominanceTurns = 0;
 	}
 
-	// 2. Incremento e controllo (sale ogni volta che finisce QUALSIASI turno)
+	// Increment counter and check for win condition (evaluates after every turn)
 	if (PlayerTowerCount >= 2)
 	{
 		PlayerDominanceTurns++;
-		UE_LOG(LogTemp, Warning, TEXT("Il Player domina da %d turni/4!"), PlayerDominanceTurns);
 
 		if (PlayerDominanceTurns >= 4)
 		{
-			UE_LOG(LogTemp, Error, TEXT("VITTORIA! Il Player ha difeso 2 torri per 2 interi round!"));
-			AddGameLog(TEXT("VITTORIA: Hai difeso le torri!"));
+			UE_LOG(LogTemp, Log, TEXT("VICTORY! Player defended 2 towers for 2 full rounds!"));
+			AddGameLog(TEXT("VICTORY: You defended the towers!"));
 			this->HandleGameOver(ETeam::Player);
 			return;
 		}
@@ -314,80 +305,30 @@ void AStrategyGameMode::EvaluateTowers()
 	else if (AITowerCount >= 2)
 	{
 		AIDominanceTurns++;
-		UE_LOG(LogTemp, Warning, TEXT("L'IA domina da %d turni/4!"), AIDominanceTurns);
 
 		if (AIDominanceTurns >= 4)
 		{
-			UE_LOG(LogTemp, Error, TEXT("SCONFITTA! L'IA ha difeso 2 torri per 2 interi round!"));
-			AddGameLog(TEXT("SCONFITTA: L'IA ha difeso le torri!"));
+			UE_LOG(LogTemp, Log, TEXT("DEFEAT! AI defended 2 towers for 2 full rounds!"));
+			AddGameLog(TEXT("DEFEAT: AI defended the towers!"));
 			this->HandleGameOver(ETeam::AI);
 			return;
 		}
 	}
 }
-/*
-void AStrategyGameMode::StartFirstTurn()
-{
-	// 1. RESET DI SICUREZZA: Assicuriamoci che tutte le unità siano fresche
-	TArray<AActor*> AllUnits;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyUnit::StaticClass(), AllUnits);
 
-	for (AActor* Actor : AllUnits)
-	{
-		AStrategyUnit* Unit = Cast<AStrategyUnit>(Actor);
-		if (Unit)
-		{
-			Unit->bHasMovedThisTurn = false;
-			Unit->bHasAttacked = false;
-			Unit->bIsTurnFinished = false;
-			Unit->bHasMoved = false;
-		}
-	}
-
-	// 2. SBLOCCO DEL MOUSE: Togliamo il focus dal bottone e ridiamolo al gioco
-	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (PC)
-	{
-		FInputModeGameAndUI InputMode;
-		PC->SetInputMode(InputMode);
-	}
-
-	// 3. LANCIO DELLA MONETA (Random 50/50)
-	if (FMath::RandBool())
-	{
-		CurrentTurnState = ETurnState::PlayerTurn;
-
-		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Green, TEXT("LANCIO MONETA: Testa! Inizia il GIOCATORE!"));
-		UE_LOG(LogTemp, Warning, TEXT("=== LANCIO MONETA: Vince il GIOCATORE! ==="));
-
-		AddGameLog(TEXT("Lancio Moneta: Inizia il Giocatore!"));
-	}
-	else
-	{
-		CurrentTurnState = ETurnState::AITurn;
-
-		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Red, TEXT("LANCIO MONETA: Croce! Inizia l'IA!"));
-		UE_LOG(LogTemp, Warning, TEXT("=== LANCIO MONETA: Vince l'IA! ==="));
-
-		AddGameLog(TEXT("Lancio Moneta: Inizia l'Intelligenza Artificiale!"));
-
-		GetWorldTimerManager().SetTimerForNextTick(this, &AStrategyGameMode::ProcessAITurn);
-	}
-}
-*/
 FString AStrategyGameMode::GetCellCoordinateName(int32 X, int32 Y)
 {
-	// Convertiamo la Y (0-24) nella lettera corrispondente (A-Y)
-	// La 'A' in codice ASCII è 65. Quindi 65 + 0 = 'A', 65 + 1 = 'B', ecc.
+	// Convert the Y axis (0-24) to the corresponding letter (A-Y)
+	// ASCII 'A' is 65. 65 + 0 = 'A', 65 + 1 = 'B', etc.
 	char Letter = 'A' + FMath::Clamp(Y, 0, 24);
 
-	// Formattiamo la stringa finale (es. "C4")
+	// Format the final string (e.g., "C4")
 	return FString::Printf(TEXT("%c%d"), Letter, X);
 }
 
 void AStrategyGameMode::AddGameLog(const FString& Message)
 {
-	// Suona il megafono passando il messaggio!
+	// Broadcast the message to the UI event listener
 	OnGameLogAdded.Broadcast(Message);
 }
 

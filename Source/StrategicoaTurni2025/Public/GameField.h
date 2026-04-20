@@ -4,7 +4,10 @@
 #include "GameFramework/Actor.h"
 #include "GameField.generated.h"
 
-// Struttura che definisce i dati della singola cella della griglia
+/*
+   Struct representing the raw data for a single grid cell.
+   Used during the procedural generation phase before physical tiles are spawned.
+ */
 USTRUCT(BlueprintType)
 struct FGridCell
 {
@@ -16,11 +19,11 @@ struct FGridCell
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Data")
 	int32 Y = 0;
 
-	// Livello di elevazione da 0 a 4
+	// Elevation level from 0 (Water) to 4 (High Mountain)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Data")
 	int32 Elevation = 0;
 
-	// True se ci si può camminare, False se è livello 0 (acqua)
+	// Movement flag: false for level 0 (Water), true for levels 1-4
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Data")
 	bool bIsWalkable = false;
 };
@@ -31,10 +34,10 @@ class STRATEGICOATURNI2025_API AGameField : public AActor
 	GENERATED_BODY()
 
 public:
-	// Costruttore di default
 	AGameField();
 
-	// Blueprint delle unità da assegnare nell'editor
+	// Unit and Object Classes
+
 	UPROPERTY(EditAnywhere, Category = "Game Logic|Units")
 	TSubclassOf<AActor> BrawlerClass;
 
@@ -44,7 +47,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Game Logic|Units")
 	TSubclassOf<AActor> TowerClass;
 
-	// Funzione per spawnare le unità iniziali
+	// Handles the procedural generation of the grid and the initial placement of towers
 	UFUNCTION(BlueprintCallable, Category = "Game Logic")
 	void SpawnInitialEntities();
 
@@ -52,18 +55,19 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
+	// Map Generation Settings
 
-	// Mappa fissa oppure no
+	// Determines if the Perlin Noise generator should use a random seed or a fixed one for debugging
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Settings")
 	bool bUseRandomSeed = true;
 
-	// Parametri esposti ai Blueprint per essere configurati dal Widget
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Settings")
 	int32 GridSizeX = 25;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Settings")
 	int32 GridSizeY = 25;
 
+	// Scale factor for the Perlin Noise frequency
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Settings")
 	float NoiseScale = 0.15f;
 
@@ -73,95 +77,90 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Settings")
 	int32 RandomSeed = 0;
 
-	// Lo "slot" per inserire il nostro cubetto Blueprint
+	// The specific Blueprint class used to instantiate the physical tiles on the map
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Settings")
-	TSubclassOf<AActor> CellBlueprint;
+	TSubclassOf<class ATile> TileClass;
 
-	// La dimensione del cubo in Unreal (di default un cubo base è 100x100)
+	// Distance between the centers of two adjacent tiles
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Settings")
 	float CellSize = 100.0f;
 
-	// L'array che contiene tutte le 625 celle generate
+	// Data Structures
+
+	// Array containing the logical data for each cell before spawning
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Map Data")
 	TArray<FGridCell> GridData;
 
-	// Funzione richiamabile dai Blueprint per generare la griglia
+	// Core spatial dictionary linking grid coordinates to their corresponding ATile actor
+	UPROPERTY(Transient)
+	TMap<FIntPoint, class ATile*> TileMap;
+
+	// Logic to generate heights and properties for the entire grid
 	UFUNCTION(BlueprintCallable, Category = "Map Generation")
 	void GenerateGridData();
 
-	// La TMap fondamentale per il Best Path (A*) e per il Controller!
-	// FIntPoint sarà (X, Y), ATile* sarà il puntatore al cubetto spawnato
-	UPROPERTY(Transient)
-	TMap<FIntPoint, class ATile*> TileMap; // AGGIORNATO A FIntPoint
+	// Pathfinding and Movement 
 
-	// Cambiamo AActor in ATile per sicurezza di tipo
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map Settings")
-	TSubclassOf<class ATile> TileClass;
-	/*
-	// Variabili per il Pathfinding (A*)
-	UPROPERTY(BlueprintReadWrite, Category = "Pathfinding")
-	class ATile* SelectedUnitTile;
-	*/
 	UPROPERTY(BlueprintReadWrite, Category = "Pathfinding")
 	class ATile* TargetTile;
 
-	// --- SISTEMA DI MOVIMENTO (DIJKSTRA) ---
-
-	// Array per memorizzare le celle attualmente illuminate
+	// List of tiles currently highlighted for movement
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pathfinding")
 	TArray<class ATile*> HighlightedTiles;
 
-	// Mappa per ricostruire il percorso (Da dove sono arrivato per raggiungere questa cella?)
+	// Internal map used by Dijkstra/A* to reconstruct the path
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pathfinding")
 	TMap<class ATile*, class ATile*> CameFromMap;
 
-	// Funzione che calcola e restituisce la lista di coordinate 3D
+	// Calculates the world-space path coordinates to a destination tile
 	UFUNCTION(BlueprintCallable, Category = "Pathfinding")
 	TArray<FVector> GetPathToTile(class ATile* DestinationTile);
 
-	// Funzione che calcola l'area di movimento e la illumina
+	// Calculates and visually highlights all reachable tiles for a selected unit
 	UFUNCTION(BlueprintCallable, Category = "Pathfinding")
 	void HighlightReachableTiles(class AStrategyUnit* SelectedUnit);
 
-	// Funzione per spegnere tutte le celle
+	// Turns off all movement highlights on the grid
 	UFUNCTION(BlueprintCallable, Category = "Pathfinding")
 	void ClearHighlightedTiles();
 
-	// Illumina la zona sicura per piazzare le truppe
+	// Highlights valid deployment rows for player and AI at the start of the match
 	UFUNCTION(BlueprintCallable, Category = "Deployment")
 	void HighlightDeploymentZone();
 
-	// --- SISTEMA DI ATTACCO ---
+	// Combat System
 
-	// Array per memorizzare le celle rosse attualmente illuminate
+	// List of tiles containing enemies within attack range
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	TArray<class ATile*> AttackableTiles;
 
-	// Calcola e illumina di rosso i nemici nel raggio d'azione
+	// Identifies and highlights all enemy units that the current unit can attack
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	void HighlightAttackableTiles(class AStrategyUnit* AttackingUnit);
 
-	// Spegne le celle rosse
+	// Resets all attack-related visual highlights
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	void ClearAttackableTiles();
 
-	// Algoritmo di Bresenham per la Line of Sight dello Sniper
+	// Uses Bresenham's line algorithm to check if a clear line of sight exists between two tiles
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	bool HasLineOfSight(class ATile* InStartTile, class ATile* InTargetTile);
 
-	// --- NUOVO: ALGORITMO A* ---
-	// Restituisce la lista di celle che compongono il percorso ottimale verso un bersaglio
+	// AI Algorithms
+
+	// Implements A* algorithm to find the optimal path to a target
 	UFUNCTION(BlueprintCallable, Category = "AI Pathfinding")
 	TArray<class ATile*> FindPathAStar(class ATile* StartTile, class ATile* InTargetTile);
 
-	// --- NUOVO: ALGORITMO GREEDY (REQUISITO 10) ---
+	// Implements Greedy Best-First Search for fast, heuristic-based movement
 	UFUNCTION(BlueprintCallable, Category = "AI Pathfinding")
 	TArray<class ATile*> FindPathGreedy(class ATile* StartTile, class ATile* InTargetTile);
 
+	// Handles spawning of a specific AI unit based on the deployment sequence
 	UFUNCTION(BlueprintCallable, Category = "Game Logic")
 	void SpawnSingleAIUnit(int32 UnitIndex);
 
 private:
-	// La funzione "Secchiello" che controlla se le celle sono tutte collegate
+	// Validates if every walkable tile on the map is reachable from any other walkable tile
 	bool IsMapFullyConnected();
 };

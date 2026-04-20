@@ -4,17 +4,22 @@
 #include "GameFramework/Actor.h"
 #include "StrategyUnit.generated.h"
 
-// Diciamo al compilatore in anticipo che esiste una classe ATile
+// FORWARD DECLARATIONS 
 class ATile;
+class AGameField;
+class UMaterialInterface;
+class USceneComponent;
+class UStaticMeshComponent;
 
-// Enum per il tipo di attacco, come richiesto dal PDF (Spazi invisibili rimossi)
+// Defines the combat capabilities of the unit
 UENUM(BlueprintType)
 enum class EAttackType : uint8
 {
-	MELEE   UMETA(DisplayName = "Corto Raggio"),
-	RANGED  UMETA(DisplayName = "A Distanza")
+	MELEE   UMETA(DisplayName = "Melee"),
+	RANGED  UMETA(DisplayName = "Ranged")
 };
 
+// Defines the faction the unit belongs to
 UENUM(BlueprintType)
 enum class ETeam : uint8
 {
@@ -30,21 +35,24 @@ class STRATEGICOATURNI2025_API AStrategyUnit : public AActor
 public:
 	AStrategyUnit();
 
-	// --- MATERIALI DELLE FAZIONI ---
-	UPROPERTY(EditDefaultsOnly, Category = "Unit Visuals")
-	class UMaterialInterface* PlayerMaterial;
+	// FACTION MATERIALS
 
 	UPROPERTY(EditDefaultsOnly, Category = "Unit Visuals")
-	class UMaterialInterface* AIMaterial;
+	UMaterialInterface* PlayerMaterial;
 
-	// --- COMPONENTI VISIVI ---
+	UPROPERTY(EditDefaultsOnly, Category = "Unit Visuals")
+	UMaterialInterface* AIMaterial;
+
+	// VISUAL COMPONENTS
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	USceneComponent* SceneRoot;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* UnitMesh;
 
-	// --- STATISTICHE BASE ---
+	// BASE STATISTICS
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit Stats")
 	FString UnitLogID;
 
@@ -72,7 +80,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit Stats")
 	int32 MaxHealth;
 
-	// --- VARIABILI DI STATO ---
+	// RUNTIME STATE VARIABLES
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit State")
 	int32 CurrentHealth;
 
@@ -85,7 +94,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit State")
 	bool bHasActedThisTurn;
 
-	// --- FUNZIONI DI COMBATTIMENTO E GESTIONE ---
+	// COMBAT and LIFECYCLE FUNCTIONS
 
 	UFUNCTION(BlueprintCallable, Category = "Unit Actions")
 	void ReceiveDamage(int32 DamageAmount);
@@ -99,11 +108,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Unit Actions")
 	void AttackTarget(AStrategyUnit* TargetUnit);
 
-	// --- NUOVO: INTELLIGENZA ARTIFICIALE ---
+	// AI SYSTEMS
+
+	// Main entry point for the AI unit to evaluate the board and act
 	UFUNCTION(BlueprintCallable, Category = "AI")
 	void ExecuteAITurn();
 
-	// --- VARIABILI LOGICA TURNI ---
+	// TURN LOGIC FLAGS
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turn Logic")
 	bool bHasMoved = false;
 
@@ -113,59 +124,58 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turn Logic")
 	bool bIsTurnFinished = false;
 
-	// --- VARIABILI PER IL MOVIMENTO ---
-	
+	// MOVEMENT SYSTEMS
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
 	bool bIsMoving = false;
 
+	// Note: Consider removing HealthPoints if CurrentHealth is the primary tracker
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats")
 	int32 HealthPoints = 10;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
 	float MoveSpeed = 600.0f;
-	
+
 	TArray<FVector> PathToFollow;
 	int32 CurrentPathIndex = 0;
 
 	void StartMoving(TArray<FVector> NewPath);
 	virtual void Tick(float DeltaTime) override;
 
-	// Reference diretta al campo di gioco
+	// Direct reference to the map logic generator
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "References")
-	class AGameField* GameFieldRef;
+	AGameField* GameFieldRef;
 
-	// --- VARIABILI IA ---
+	// INTERNAL AI DATA
+
 	ATile* AIBestTargetTile = nullptr;
 	FTimerHandle AIThinkTimerHandle;
 
+	// Executed via timer to simulate AI "thinking" before moving
 	UFUNCTION()
-	void ExecuteAIMovement(); // La funzione che partirà DOPO il delay
+	void ExecuteAIMovement();
 
-	// --- SISTEMA DI RESPAWN ---
+	// RESPAWN SYSTEMS
 
-	// Memorizza la cella iniziale per il respawn
+	// Caches the deployment tile to allow unit recovery upon death
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Grid")
 	ATile* OriginalSpawnTile;
 
-	// Funzione che gestisce la "falsa morte" e il ritorno alla base
+	// Handles the "fake death" visual and resets the unit to the OriginalSpawnTile
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	void RespawnUnit();
-	/*
-	// Aggiungi questo: creerà un nodo Evento rosso nel Blueprint!
-	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
-	void SetupHealthBarUI();
 
-	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
-	void ShowFloatingDamage(int32 DamageReceived);
-	*/
+	// BLUEPRINT UI EVENTS 
 
-	// EVENTI UI DA IMPLEMENTARE IN BLUEPRINT
+	// Hook to instantiate the health bar widget dynamically
 	UFUNCTION(BlueprintImplementableEvent, Category = "Unit UI")
 	void OnSetupHealthBar(ETeam Team);
 
+	// Hook to update the health bar fill percentage
 	UFUNCTION(BlueprintImplementableEvent, Category = "Unit UI")
-	void OnHealthChanged(float NewCurrentHealth, float NewMaxHealth); // <--- NOMI CAMBIATI
+	void OnHealthChanged(float NewCurrentHealth, float NewMaxHealth);
 
+	// Hook to spawn a floating text widget representing damage taken
 	UFUNCTION(BlueprintImplementableEvent, Category = "Unit UI")
 	void OnShowFloatingDamage(float DamageAmount, FVector SpawnLocation);
 
