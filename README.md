@@ -69,7 +69,7 @@ This project is a **1vs1 strategic turn-based game** (Player vs AI) developed us
 
 1. **Clonare la repository / Clone the repository**
 ```bash
-   git clone https://github.com/simocastro18/(K)nightmare
+   git clone https://github.com/simocastro18/Knightmare
 ```
 
 2. **Fare clic destro sul file `.uproject`** e selezionare **"Generate Visual Studio project files"**
