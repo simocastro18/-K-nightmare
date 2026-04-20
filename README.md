@@ -10,11 +10,16 @@ Questo progetto consiste in un videogioco **strategico a turni 1vs1** (Giocatore
 
 ### Caratteristiche Principali
 
-- **Mappa Procedurale** — Ogni partita presenta una conformazione del terreno diversa grazie all'uso di seed casuali.
-- **Classi di Unità** — Sniper (attacco a distanza) e Brawler (combattimento corpo a corpo).
-- **Sistema di Conquista** — Tre torri posizionate simmetricamente fungono da obiettivi strategici per la vittoria.
-- **Intelligenza Artificiale** — Implementazione di algoritmi di ricerca del percorso A\* e Greedy Best-First Search.
-- **Sviluppo C++** — Il core del gioco è interamente scritto in C++, utilizzando i Blueprint solo per l'interfaccia grafica (UMG).
+- **Mappa Procedurale** 
+  Ogni partita presenta una conformazione del terreno diversa grazie all'uso di seed casuali.
+- **Classi di Unità** 
+  Sniper (attacco a distanza) e Brawler (combattimento corpo a corpo).
+- **Sistema di Conquista** 
+  Tre torri posizionate simmetricamente fungono da obiettivi strategici per la vittoria.
+- **Intelligenza Artificiale**
+  Implementazione di algoritmi di ricerca del percorso A\* e Greedy Best-First Search.
+- **Sviluppo C++** 
+  Il core del gioco è interamente scritto in C++, utilizzando i Blueprint solo per l'interfaccia grafica (UMG).
 
 ---
 
@@ -36,16 +41,16 @@ This project is a **1vs1 strategic turn-based game** (Player vs AI) developed us
 
 | # | Requisito / Requirement | Stato / Status |
 |---|-------------------------|:--------------:|
-| 1 | Codice strutturato (OOP), commentato e compilazione corretta | ? |
-| 2 | Griglia di gioco iniziale visibile e corretta | ? |
-| 3 | Meccanismo di posizionamento Unità e Torri | ? |
-| 4 | Intelligenza Artificiale basata su algoritmo A\* | ? |
-| 5 | Gestione Turni e Condizione di Vittoria | ? |
-| 6 | Interfaccia grafica (Turno, HP, Torri conquistate) | ? |
-| 7 | Suggerimento range di movimento (Highlight celle) | ? |
-| 8 | Meccanismo di danno da contrattacco | ? |
-| 9 | Storico delle mosse (Combat Log) | ? |
-| 10 | Algoritmo IA euristico ottimizzato (Greedy Best-First) | ? |
+| 1 | Codice strutturato, commentato e compilazione corretta | Done|
+| 2 | Griglia di gioco iniziale visibile e corretta | Done |
+| 3 | Meccanismo di posizionamento Unità e Torri | Done |
+| 4 | Intelligenza Artificiale basata su algoritmo A\* | Done |
+| 5 | Gestione Turni e Condizione di Vittoria | Done |
+| 6 | Interfaccia grafica (Turno, HP, Torri conquistate) | Done |
+| 7 | Suggerimento range di movimento (Highlight celle) | Done |
+| 8 | Meccanismo di danno da contrattacco | Done |
+| 9 | Storico delle mosse (Combat Log) | Done |
+| 10 | Algoritmo IA euristico ottimizzato (Greedy Best-First) | Done |
 
 ---
 
@@ -64,7 +69,7 @@ This project is a **1vs1 strategic turn-based game** (Player vs AI) developed us
 
 1. **Clonare la repository / Clone the repository**
 ```bash
-   git clone <url-repository>
+   git clone https://github.com/simocastro18/(K)nightmare
 ```
 
 2. **Fare clic destro sul file `.uproject`** e selezionare **"Generate Visual Studio project files"**
