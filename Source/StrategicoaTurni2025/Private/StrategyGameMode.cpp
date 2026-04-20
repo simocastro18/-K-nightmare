@@ -80,13 +80,13 @@ void AStrategyGameMode::StartCoinFlipAndDeployment()
 	{
 		FirstTurnWinner = ETeam::Player;
 		bPlayerDeploysNext = true;
-		AddGameLog(TEXT("Moneta: Il Giocatore piazza per primo!"));
+		AddGameLog(TEXT("Coin: HP places first!"));
 	}
 	else
 	{
 		FirstTurnWinner = ETeam::AI;
 		bPlayerDeploysNext = false;
-		AddGameLog(TEXT("Moneta: L'IA piazza per prima!"));
+		AddGameLog(TEXT("Coin: AI places first!"));
 	}
 
 	AdvanceDeployment();
@@ -97,7 +97,7 @@ void AStrategyGameMode::AdvanceDeployment()
 	// Controlliamo se tutti hanno piazzato le loro 2 unità
 	if (PlayerUnitsPlaced >= 2 && AIUnitsPlaced >= 2)
 	{
-		AddGameLog(TEXT("Schieramento completato!"));
+		AddGameLog(TEXT("Deployment completed!"));
 
 		// Sblocchiamo il mouse al 100%
 		APlayerController* PC = GetWorld()->GetFirstPlayerController();
@@ -107,12 +107,12 @@ void AStrategyGameMode::AdvanceDeployment()
 		if (FirstTurnWinner == ETeam::Player)
 		{
 			CurrentTurnState = ETurnState::PlayerTurn;
-			AddGameLog(TEXT("=== INIZIA IL GIOCATORE ==="));
+			AddGameLog(TEXT("=== HP starts ==="));
 		}
 		else
 		{
 			CurrentTurnState = ETurnState::AITurn;
-			AddGameLog(TEXT("=== INIZIA L'INTELLIGENZA ARTIFICIALE ==="));
+			AddGameLog(TEXT("=== AI starts ==="));
 			GetWorldTimerManager().SetTimerForNextTick(this, &AStrategyGameMode::ProcessAITurn);
 		}
 		return;
@@ -283,48 +283,45 @@ void AStrategyGameMode::EvaluateTowers()
 
 	UE_LOG(LogTemp, Warning, TEXT("Punteggio Torri -> Player: %d | AI: %d"), PlayerTowerCount, AITowerCount);
 
-	if (CurrentTurnState == ETurnState::PlayerTurn)
+	// =========================================================
+	// CONTROLLO VITTORIA (Logica a 4 mezzi-turni consecutivi)
+	// =========================================================
+
+	// 1. Azzeriamo preventivamente la streak se non si hanno 2 torri
+	if (PlayerTowerCount < 2)
 	{
-		if (PlayerTowerCount >= 2)
-		{
-			PlayerDominanceTurns++;
-			UE_LOG(LogTemp, Warning, TEXT("Il Player domina per il turno %d!"), PlayerDominanceTurns);
-			if (PlayerDominanceTurns >= 2)
-			{
-				UE_LOG(LogTemp, Error, TEXT("VITTORIA! Il Player ha mantenuto 2 torri per 2 turni consecutivi!"));
+		PlayerDominanceTurns = 0;
+	}
+	if (AITowerCount < 2)
+	{
+		AIDominanceTurns = 0;
+	}
 
-				// NUOVO LOG
-				AddGameLog(TEXT("VITTORIA: Hai dominato le torri per 2 turni!"));
+	// 2. Incremento e controllo (sale ogni volta che finisce QUALSIASI turno)
+	if (PlayerTowerCount >= 2)
+	{
+		PlayerDominanceTurns++;
+		UE_LOG(LogTemp, Warning, TEXT("Il Player domina da %d turni/4!"), PlayerDominanceTurns);
 
-				this->HandleGameOver(ETeam::Player);
-				return;
-			}
-		}
-		else
+		if (PlayerDominanceTurns >= 4)
 		{
-			PlayerDominanceTurns = 0;
+			UE_LOG(LogTemp, Error, TEXT("VITTORIA! Il Player ha difeso 2 torri per 2 interi round!"));
+			AddGameLog(TEXT("VITTORIA: Hai difeso le torri!"));
+			this->HandleGameOver(ETeam::Player);
+			return;
 		}
 	}
-	else if (CurrentTurnState == ETurnState::AITurn)
+	else if (AITowerCount >= 2)
 	{
-		if (AITowerCount >= 2)
-		{
-			AIDominanceTurns++;
-			UE_LOG(LogTemp, Warning, TEXT("L'IA domina per il turno %d!"), AIDominanceTurns);
-			if (AIDominanceTurns >= 2)
-			{
-				UE_LOG(LogTemp, Error, TEXT("SCONFITTA! L'IA ha mantenuto 2 torri per 2 turni consecutivi!"));
+		AIDominanceTurns++;
+		UE_LOG(LogTemp, Warning, TEXT("L'IA domina da %d turni/4!"), AIDominanceTurns);
 
-				// NUOVO LOG
-				AddGameLog(TEXT("SCONFITTA: L'IA ha dominato le torri per 2 turni!"));
-
-				this->HandleGameOver(ETeam::AI);
-				return;
-			}
-		}
-		else
+		if (AIDominanceTurns >= 4)
 		{
-			AIDominanceTurns = 0;
+			UE_LOG(LogTemp, Error, TEXT("SCONFITTA! L'IA ha difeso 2 torri per 2 interi round!"));
+			AddGameLog(TEXT("SCONFITTA: L'IA ha difeso le torri!"));
+			this->HandleGameOver(ETeam::AI);
+			return;
 		}
 	}
 }

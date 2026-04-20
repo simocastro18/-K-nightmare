@@ -342,7 +342,7 @@ void AStrategyUnit::ExecuteAITurn()
 			AccumulatedCost += StepCost;
 			AIBestTargetTile = StepTile;
 
-			StepTile->OnSelectionChanged(true);
+			StepTile->OnSelectionChanged(true,true);
 			GameFieldRef->HighlightedTiles.Add(StepTile);
 		}
 		else
@@ -498,7 +498,7 @@ void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
 		int32 TargetNumber = TargetUnit->CurrentTile->GetGridPosition().X;
 
 		// 4. Creazione della stringa finale: forza il prefisso "ATK:"
-		FString AttackMsg = FString::Printf(TEXT("ATK: %s attacca %c%d (-%d HP)"), *UnitInitial, TargetLetter, TargetNumber, Damage);
+		FString AttackMsg = FString::Printf(TEXT("ATK: %s Attack %c%d (-%d HP)"), *UnitInitial, TargetLetter, TargetNumber, Damage);
 		GM->AddGameLog(AttackMsg);
 	}
 

@@ -2,6 +2,7 @@
 #include "Tile.h"  
 #include "StrategyUnit.h"
 #include "StrategyTower.h"
+#include "StrategyGameMode.h"
 #include "Math/UnrealMathUtility.h"
 #include "Kismet/GameplayStatics.h"
 //debug
@@ -15,6 +16,16 @@ AGameField::AGameField()
 void AGameField::BeginPlay()
 {
 	Super::BeginPlay();
+	// FORZATURA GRAFICA: Spegne le ombre su qualsiasi PC
+	if (GEngine)
+	{
+		// Disattiva il gruppo di scalabilità delle ombre
+		GEngine->Exec(GetWorld(), TEXT("sg.ShadowQuality 0"));
+
+		// Per sicurezza extra, forza la variabile interna del rendering
+		GEngine->Exec(GetWorld(), TEXT("r.ShadowQuality 0"));
+	}
+
 }
 
 void AGameField::GenerateGridData()
@@ -315,6 +326,20 @@ void AGameField::SpawnSingleAIUnit(int32 UnitIndex)
 			UGameplayStatics::FinishSpawningActor(NewUnit, SpawnTransform);
 
 			if (StrategyUnit) { StrategyUnit->InitializeUnit(LogID, ETeam::AI, 90.0f, T); }
+
+			// ==========================================
+			// NUOVO: LOG DI SCHIERAMENTO IA
+			// ==========================================
+			AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
+			if (GM)
+			{
+				// Se UnitIndex è 0 è il Brawler (B), altrimenti è lo Sniper (S)
+				FString UnitInitial = (UnitIndex == 0) ? TEXT("B") : TEXT("S");
+				char ColLetter = 'A' + T->GetGridPosition().Y;
+				int32 RowNum = T->GetGridPosition().X;
+
+				GM->AddGameLog(FString::Printf(TEXT("AI: Placed %s in %c%d"), *UnitInitial, ColLetter, RowNum));
+			}
 		}
 	}
 }

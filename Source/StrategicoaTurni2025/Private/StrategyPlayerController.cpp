@@ -79,7 +79,7 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 					FString UnitInitial = (StratUnit->AttackType == EAttackType::RANGED) ? TEXT("S") : TEXT("B");
 					char ColLetter = 'A' + ClickedTile->GetGridPosition().Y;
 					int32 RowNum = ClickedTile->GetGridPosition().X;
-					GM->AddGameLog(FString::Printf(TEXT("HP: Piazzato %s in %c%d"), *UnitInitial, ColLetter, RowNum));
+					GM->AddGameLog(FString::Printf(TEXT("HP: Placed %s in %c%d"), *UnitInitial, ColLetter, RowNum));
 				}
 
 				ClassToSpawn = nullptr;

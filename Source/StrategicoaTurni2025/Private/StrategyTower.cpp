@@ -37,7 +37,7 @@ void AStrategyTower::UpdateTowerVisuals(ETowerState NewState)
 		break;
 	case ETowerState::ControlledPlayer:
 		MatToUse = PlayerMaterial;
-		TowerMsg = FString::Printf(TEXT("TOW: Player captured Tower %c%d!"), ColLetter, RowNum);
+		TowerMsg = FString::Printf(TEXT("TOW: HP captured Tower %c%d!"), ColLetter, RowNum);
 		break;
 	case ETowerState::ControlledAI:
 		MatToUse = AIMaterial;

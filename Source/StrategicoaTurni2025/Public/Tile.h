@@ -35,6 +35,13 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* AttackMesh;
 
+	// --- NUOVE VARIABILI PER I MATERIALI DEL PERCORSO ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tile Visuals")
+	UMaterialInterface* PlayerPathMaterial;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tile Visuals")
+	UMaterialInterface* AIPathMaterial;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tile Data")
 	FIntPoint TileGridPosition;
 
@@ -73,7 +80,7 @@ public:
 
 	// MODIFICATO: Non sono più BlueprintImplementableEvent, ora sono normali funzioni C++
 	UFUNCTION(BlueprintCallable, Category = "Tile Visuals")
-	void OnSelectionChanged(bool bIsSelected);
+	void OnSelectionChanged(bool bIsSelected, bool bIsAI = false);
 
 	UFUNCTION(BlueprintCallable, Category = "Tile Visuals")
 	void UpdateAttackHighlight(bool bIsHighlighted);

@@ -52,9 +52,14 @@ void ATile::BeginPlay()
 void ATile::NotifyActorBeginCursorOver()
 {
 	Super::NotifyActorBeginCursorOver();
-	// Quando il mouse passa sopra, se non è fissa, accendi la luce azzurra
+	// Quando il mouse passa sopra, accendi la luce azzurra (Player)
 	if (!bIsCurrentlySelected && PathMesh)
 	{
+		// Applica il materiale del Player prima di accendere
+		if (PlayerPathMaterial)
+		{
+			PathMesh->SetMaterial(0, PlayerPathMaterial);
+		}
 		PathMesh->SetVisibility(true);
 	}
 }
@@ -79,11 +84,23 @@ void ATile::NotifyActorOnClicked(FKey ButtonPressed)
 	// if (PC) { PC->ProcessTileClick(this); }
 }
 */
-void ATile::OnSelectionChanged(bool bIsSelected)
+void ATile::OnSelectionChanged(bool bIsSelected, bool bIsAI)
 {
 	bIsCurrentlySelected = bIsSelected;
 	if (PathMesh)
 	{
+		if (bIsSelected)
+		{
+			// Cambia il materiale in base a chi sta calcolando il percorso
+			if (bIsAI && AIPathMaterial)
+			{
+				PathMesh->SetMaterial(0, AIPathMaterial);
+			}
+			else if (!bIsAI && PlayerPathMaterial)
+			{
+				PathMesh->SetMaterial(0, PlayerPathMaterial);
+			}
+		}
 		PathMesh->SetVisibility(bIsSelected);
 	}
 }
