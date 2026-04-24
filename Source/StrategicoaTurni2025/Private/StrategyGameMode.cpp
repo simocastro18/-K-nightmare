@@ -73,6 +73,8 @@ void AStrategyGameMode::StartGameWithConfig(FGameConfig Config)
 
 	// Initiate the coin flip to decide who deploys first
 	StartCoinFlipAndDeployment();
+
+	TriggerUIUpdate();
 }
 
 void AStrategyGameMode::StartCoinFlipAndDeployment()
@@ -117,6 +119,8 @@ void AStrategyGameMode::AdvanceDeployment()
 			AddGameLog(TEXT("=== AI starts ==="));
 			GetWorldTimerManager().SetTimerForNextTick(this, &AStrategyGameMode::ProcessAITurn);
 		}
+
+		TriggerUIUpdate();
 		return;
 	}
 
@@ -169,6 +173,8 @@ void AStrategyGameMode::EndTurn()
 
 	if (bIsGameOver) return;
 
+	CurrentTurnNumber++;
+
 	TArray<AActor*> AllUnits;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyUnit::StaticClass(), AllUnits);
 
@@ -193,9 +199,10 @@ void AStrategyGameMode::EndTurn()
 	else
 	{
 		CurrentTurnState = ETurnState::PlayerTurn;
-		// Increment the turn number only when a full round is completed
-		CurrentTurnNumber++;
 	}
+
+	// 4. BROADCAST: Tell the UI that the turn state or number has changed!
+	TriggerUIUpdate();
 }
 
 void AStrategyGameMode::ProcessAITurn()
@@ -230,6 +237,7 @@ void AStrategyGameMode::ProcessAITurn()
 
 void AStrategyGameMode::EvaluateTowers()
 {
+	// 1. TROVA TUTTO UNA SOLA VOLTA
 	TArray<AActor*> AllTowers;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyTower::StaticClass(), AllTowers);
 
@@ -239,6 +247,7 @@ void AStrategyGameMode::EvaluateTowers()
 	PlayerTowerCount = 0;
 	AITowerCount = 0;
 
+	// 2. CALCOLA IL NUOVO STATO DELLE TORRI (Chi è dentro la zona?)
 	for (AActor* TowerActor : AllTowers)
 	{
 		AStrategyTower* Tower = Cast<AStrategyTower>(TowerActor);
@@ -266,6 +275,7 @@ void AStrategyGameMode::EvaluateTowers()
 
 		ETowerState OldState = Tower->CurrentState;
 
+		// Aggiorna lo stato attuale
 		if (bPlayerInZone && bAIInZone) Tower->CurrentState = ETowerState::Contested;
 		else if (bPlayerInZone) Tower->CurrentState = ETowerState::ControlledPlayer;
 		else if (bAIInZone) Tower->CurrentState = ETowerState::ControlledAI;
@@ -279,41 +289,56 @@ void AStrategyGameMode::EvaluateTowers()
 		else if (Tower->CurrentState == ETowerState::ControlledAI) AITowerCount++;
 	}
 
-	// Reset dominance streak if the required 2 towers are not held
-	if (PlayerTowerCount < 2)
+	// 3. PREPARA LE VARIABILI PER LA UI (Ora che gli stati sono aggiornati!)
+	if (AllTowers.Num() >= 3)
 	{
-		PlayerDominanceTurns = 0;
-	}
-	if (AITowerCount < 2)
-	{
-		AIDominanceTurns = 0;
+		// FORMULA CORRETTA: Unreal usa i riferimenti (&) per ordinare gli array di puntatori!
+		AllTowers.Sort([](const AActor& A, const AActor& B) {
+			const AStrategyTower* TowerA = Cast<AStrategyTower>(&A);
+			const AStrategyTower* TowerB = Cast<AStrategyTower>(&B);
+
+			if (TowerA && TowerB)
+			{
+				return TowerA->GridPosition.Y < TowerB->GridPosition.Y;
+			}
+			return false;
+			});
+
+		// Assegniamo i valori ordinati all'HUD
+		if (AStrategyTower* WestT = Cast<AStrategyTower>(AllTowers[0])) StateTowerWest = WestT->CurrentState;
+		if (AStrategyTower* MidT = Cast<AStrategyTower>(AllTowers[1])) StateTowerMid = MidT->CurrentState;
+		if (AStrategyTower* EastT = Cast<AStrategyTower>(AllTowers[2])) StateTowerEast = EastT->CurrentState;
 	}
 
-	// Increment counter and check for win condition (evaluates after every turn)
+	// 4. CONDIZIONI DI VITTORIA
+	if (PlayerTowerCount < 2) PlayerDominanceTurns = 0;
+	if (AITowerCount < 2) AIDominanceTurns = 0;
+
 	if (PlayerTowerCount >= 2)
 	{
 		PlayerDominanceTurns++;
-
 		if (PlayerDominanceTurns >= 4)
 		{
 			UE_LOG(LogTemp, Log, TEXT("VICTORY! Player defended 2 towers for 2 full rounds!"));
 			AddGameLog(TEXT("VICTORY: You defended the towers!"));
 			this->HandleGameOver(ETeam::Player);
-			return;
+			return; // Importante fermarsi qui se la partita è finita
 		}
 	}
 	else if (AITowerCount >= 2)
 	{
 		AIDominanceTurns++;
-
 		if (AIDominanceTurns >= 4)
 		{
 			UE_LOG(LogTemp, Log, TEXT("DEFEAT! AI defended 2 towers for 2 full rounds!"));
 			AddGameLog(TEXT("DEFEAT: AI defended the towers!"));
 			this->HandleGameOver(ETeam::AI);
-			return;
+			return; // Importante fermarsi qui se la partita è finita
 		}
 	}
+
+	// 5. INVIO DEL SEGNALE ALL'INTERFACCIA
+	TriggerUIUpdate();
 }
 
 FString AStrategyGameMode::GetCellCoordinateName(int32 X, int32 Y)
