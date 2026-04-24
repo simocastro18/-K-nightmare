@@ -292,19 +292,20 @@ void AStrategyGameMode::EvaluateTowers()
 	// 3. PREPARA LE VARIABILI PER LA UI (Ora che gli stati sono aggiornati!)
 	if (AllTowers.Num() >= 3)
 	{
-		// FORMULA CORRETTA: Unreal usa i riferimenti (&) per ordinare gli array di puntatori!
+		// FORMULA CORRETTA: Ordiniamo in base all'asse orizzontale (X)!
 		AllTowers.Sort([](const AActor& A, const AActor& B) {
 			const AStrategyTower* TowerA = Cast<AStrategyTower>(&A);
 			const AStrategyTower* TowerB = Cast<AStrategyTower>(&B);
 
 			if (TowerA && TowerB)
 			{
-				return TowerA->GridPosition.Y < TowerB->GridPosition.Y;
+				// CAMBIATO Y in X QUI SOTTO:
+				return TowerA->GridPosition.X < TowerB->GridPosition.X; 
 			}
 			return false;
-			});
+		});
 
-		// Assegniamo i valori ordinati all'HUD
+		// Assegniamo i valori ordinati all'HUD (Sinistra=0, Centro=1, Destra=2)
 		if (AStrategyTower* WestT = Cast<AStrategyTower>(AllTowers[0])) StateTowerWest = WestT->CurrentState;
 		if (AStrategyTower* MidT = Cast<AStrategyTower>(AllTowers[1])) StateTowerMid = MidT->CurrentState;
 		if (AStrategyTower* EastT = Cast<AStrategyTower>(AllTowers[2])) StateTowerEast = EastT->CurrentState;
