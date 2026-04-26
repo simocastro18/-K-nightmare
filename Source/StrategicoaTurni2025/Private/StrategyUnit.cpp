@@ -53,10 +53,15 @@ void AStrategyUnit::ReceiveDamage(int32 DamageAmount)
 	// Prevent health from dropping below zero
 	if (CurrentHealth < 0) CurrentHealth = 0;
 
-	// 1. Update the health bar UI
+	if (AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		GM->TriggerUIUpdate(); 
+	}
+
+	// Update the health bar UI
 	OnHealthChanged(CurrentHealth, MaxHealth);
 
-	// 2. Calculate position and spawn floating damage text
+	// Calculate position and spawn floating damage text
 	FVector DamageTextLocation = GetActorLocation() + FVector(0.0f, 0.0f, 150.0f);
 	OnShowFloatingDamage(DamageAmount, DamageTextLocation);
 
