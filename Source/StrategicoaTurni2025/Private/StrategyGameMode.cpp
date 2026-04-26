@@ -74,7 +74,6 @@ void AStrategyGameMode::StartGameWithConfig(FGameConfig Config)
 	// Initiate the coin flip to decide who deploys first
 	StartCoinFlipAndDeployment();
 
-	TriggerUIUpdate();
 }
 
 void AStrategyGameMode::StartCoinFlipAndDeployment()
