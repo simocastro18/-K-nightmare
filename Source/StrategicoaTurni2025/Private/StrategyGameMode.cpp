@@ -73,18 +73,22 @@ void AStrategyGameMode::StartGameWithConfig(FGameConfig Config)
 
 	TArray<AActor*> AllTowers;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyTower::StaticClass(), AllTowers);
-
+	
 	if (AllTowers.Num() >= 3)
 	{
 		AllTowers.Sort([](const AActor& A, const AActor& B) {
 			const AStrategyTower* TowerA = Cast<AStrategyTower>(&A);
 			const AStrategyTower* TowerB = Cast<AStrategyTower>(&B);
-			if (TowerA && TowerB) return TowerA->GridPosition.X < TowerB->GridPosition.X;
+
+			if (TowerA && TowerB)
+			{
+				return TowerA->GridPosition.Y < TowerB->GridPosition.Y;
+			}
 			return false;
 			});
 
-		RefTowerWest = Cast<AStrategyTower>(AllTowers[0]);
-		RefTowerMid = Cast<AStrategyTower>(AllTowers[1]);
+		RefTowerWest = Cast<AStrategyTower>(AllTowers[0]); 
+		RefTowerMid = Cast<AStrategyTower>(AllTowers[1]);  
 		RefTowerEast = Cast<AStrategyTower>(AllTowers[2]);
 	}
 

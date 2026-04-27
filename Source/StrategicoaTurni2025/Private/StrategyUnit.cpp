@@ -29,7 +29,7 @@ AStrategyUnit::AStrategyUnit()
 	CurrentHealth = 1;
 	PlayerOwner = -1;
 	CurrentTile = nullptr;
-	bHasActedThisTurn = false;
+	//bHasActedThisTurn = false;
 }
 
 void AStrategyUnit::BeginPlay()
@@ -321,7 +321,14 @@ void AStrategyUnit::ExecuteAITurn()
 	{
 		if (ClosestEnemy && StepTile == ClosestEnemy->CurrentTile) break;
 
-		int32 StepCost = (StepTile->Elevation > AIBestTargetTile->Elevation) ? 2 : 1;
+		int32 ElevationDiff = StepTile->Elevation - AIBestTargetTile->Elevation;
+		int32 StepCost = 1; // Costo Base
+
+		if (ElevationDiff > 0)
+		{
+			// Costa il doppio del dislivello!
+			StepCost = ElevationDiff * 2;
+		}
 
 		if (AccumulatedCost + StepCost <= MovementRange && StepTile->UnitOnTile == nullptr)
 		{
@@ -420,7 +427,7 @@ void AStrategyUnit::InitializeUnit(const FString& InUnitLogID, ETeam InUnitTeam,
 	this->CurrentTile = StartingTile;
 	this->OriginalSpawnTile = StartingTile;
 	this->CurrentHealth = MaxHealth;
-	this->bHasActedThisTurn = false;
+	//this->bHasActedThisTurn = false;
 
 	this->PlayerOwner = (InUnitTeam == ETeam::Player) ? 0 : 1;
 
@@ -491,7 +498,7 @@ void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
 		{
 			int32 CounterDamage = FMath::RandRange(1, 3);
 			this->ReceiveDamage(CounterDamage);
-
+			//To modify
 			// On-screen debug alert for the counter-attack
 			if (GEngine) {
 				GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Orange, FString::Printf(TEXT("COUNTER-ATTACK! %s takes %d reflect damage!"), *this->UnitLogID, CounterDamage));

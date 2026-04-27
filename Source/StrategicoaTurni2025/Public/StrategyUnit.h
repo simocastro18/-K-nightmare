@@ -90,10 +90,10 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit State")
 	ATile* CurrentTile;
-
+	/*
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit State")
 	bool bHasActedThisTurn;
-
+	*/
 	// COMBAT and LIFECYCLE FUNCTIONS
 
 	UFUNCTION(BlueprintCallable, Category = "Unit Actions")

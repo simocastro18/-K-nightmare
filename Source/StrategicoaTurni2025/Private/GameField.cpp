@@ -355,8 +355,16 @@ void AGameField::HighlightReachableTiles(AStrategyUnit* SelectedUnit)
 				// Proceed only if walkable, not an obstacle, and unoccupied
 				if (IsValid(Neighbor) && Neighbor->bIsWalkable && Neighbor->Status != ETileStatus::OBSTACLE && !IsValid(Neighbor->UnitOnTile))
 				{
-					// Moving to a higher elevation costs 2 movement points, otherwise 1
-					int32 StepCost = (Neighbor->Elevation > Current->Elevation) ? 2 : 1;
+					// Movement cost rule
+					int32 ElevationDiff = Neighbor->Elevation - Current->Elevation;
+					int32 StepCost = 1; // Base cost for flat terrain or moving downhill
+
+					if (ElevationDiff > 0)
+					{
+						// Uphill penalty: costs twice the elevation difference
+						StepCost = ElevationDiff * 2;
+					}
+
 					int32 NewCost = CurrentCost + StepCost;
 
 					if (NewCost <= MaxRange)
@@ -576,7 +584,17 @@ TArray<ATile*> AGameField::FindPathAStar(ATile* InStartTile, ATile* InTargetTile
 				if (Neighbor->UnitOnTile != nullptr && Neighbor != InTargetTile)
 					continue;
 
-				int32 StepCost = (Neighbor->Elevation > Current->Elevation) ? 2 : 1;
+				// --- MOVEMENT COST RULE (AI) ---
+				int32 ElevationDiff = Neighbor->Elevation - Current->Elevation;
+				int32 StepCost = 1; // Base cost
+
+				if (ElevationDiff > 0)
+				{
+					// Uphill penalty: costs twice the elevation difference
+					StepCost = ElevationDiff * 2;
+				}
+				// -------------------------------
+
 				int32 TentativeG = GScore[Current] + StepCost;
 
 				if (!OpenSet.Contains(Neighbor))
@@ -723,8 +741,8 @@ bool AGameField::HasLineOfSight(ATile* InStartTile, ATile* InTargetTile)
 			{
 				ATile* IntersectTile = *IntersectTilePtr;
 
-				// Elevation Rule: Line of sight is blocked by any tile higher than the attacker's tile
-				if (IntersectTile->Elevation > StartElevation)
+				// Elevation Rule: Line of sight is blocked by any tile higher than the attacker's tile and by tower
+				if (IntersectTile->Elevation > StartElevation || IntersectTile->Status == ETileStatus::OBSTACLE)
 				{
 					return false;
 				}
