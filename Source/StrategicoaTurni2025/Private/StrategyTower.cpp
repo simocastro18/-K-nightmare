@@ -7,8 +7,12 @@ AStrategyTower::AStrategyTower()
 	CurrentState = ETowerState::Neutral;
 
 	// Initialize the physical mesh component
+	
+	USceneComponent* SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	SetRootComponent(SceneRoot);
+
 	TowerMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TowerMesh"));
-	SetRootComponent(TowerMesh);
+	TowerMesh->SetupAttachment(SceneRoot); 
 }
 
 void AStrategyTower::BeginPlay()
@@ -50,12 +54,8 @@ void AStrategyTower::UpdateTowerVisuals(ETowerState NewState)
 
 	// Apply the selected material to all material slots on the mesh
 	if (MatToUse != nullptr && TowerMesh != nullptr)
-	{
-		int32 NumMaterials = TowerMesh->GetNumMaterials();
-		for (int32 i = 0; i < NumMaterials; ++i)
-		{
-			TowerMesh->SetMaterial(i, MatToUse);
-		}
+	{	
+			TowerMesh->SetMaterial(0, MatToUse);
 	}
 
 	// Broadcast the state change to the GameMode for the UI Combat Log
