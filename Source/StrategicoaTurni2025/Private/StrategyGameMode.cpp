@@ -69,6 +69,25 @@ void AStrategyGameMode::StartGameWithConfig(FGameConfig Config)
 		MapGenerator->SpawnInitialEntities();
 	}
 
+	// Save tower position
+
+	TArray<AActor*> AllTowers;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyTower::StaticClass(), AllTowers);
+
+	if (AllTowers.Num() >= 3)
+	{
+		AllTowers.Sort([](const AActor& A, const AActor& B) {
+			const AStrategyTower* TowerA = Cast<AStrategyTower>(&A);
+			const AStrategyTower* TowerB = Cast<AStrategyTower>(&B);
+			if (TowerA && TowerB) return TowerA->GridPosition.X < TowerB->GridPosition.X;
+			return false;
+			});
+
+		RefTowerWest = Cast<AStrategyTower>(AllTowers[0]);
+		RefTowerMid = Cast<AStrategyTower>(AllTowers[1]);
+		RefTowerEast = Cast<AStrategyTower>(AllTowers[2]);
+	}
+
 	CurrentTurnState = ETurnState::Deployment;
 
 	// Initiate the coin flip to decide who deploys first
@@ -288,27 +307,10 @@ void AStrategyGameMode::EvaluateTowers()
 		else if (Tower->CurrentState == ETowerState::ControlledAI) AITowerCount++;
 	}
 
-	// 3. PREPARA LE VARIABILI PER LA UI (Ora che gli stati sono aggiornati!)
-	if (AllTowers.Num() >= 3)
-	{
-		// FORMULA CORRETTA: Ordiniamo in base all'asse orizzontale (X)!
-		AllTowers.Sort([](const AActor& A, const AActor& B) {
-			const AStrategyTower* TowerA = Cast<AStrategyTower>(&A);
-			const AStrategyTower* TowerB = Cast<AStrategyTower>(&B);
-
-			if (TowerA && TowerB)
-			{
-				// CAMBIATO Y in X QUI SOTTO:
-				return TowerA->GridPosition.X < TowerB->GridPosition.X; 
-			}
-			return false;
-		});
-
-		// Assegniamo i valori ordinati all'HUD (Sinistra=0, Centro=1, Destra=2)
-		if (AStrategyTower* WestT = Cast<AStrategyTower>(AllTowers[0])) StateTowerWest = WestT->CurrentState;
-		if (AStrategyTower* MidT = Cast<AStrategyTower>(AllTowers[1])) StateTowerMid = MidT->CurrentState;
-		if (AStrategyTower* EastT = Cast<AStrategyTower>(AllTowers[2])) StateTowerEast = EastT->CurrentState;
-	}
+	// 3. PREPARA LE VARIABILI PER LA UI (Leggiamo la cassaforte!)
+	if (RefTowerWest) StateTowerWest = RefTowerWest->CurrentState;
+	if (RefTowerMid)  StateTowerMid = RefTowerMid->CurrentState;
+	if (RefTowerEast) StateTowerEast = RefTowerEast->CurrentState;
 
 	// 4. CONDIZIONI DI VITTORIA
 	if (PlayerTowerCount < 2) PlayerDominanceTurns = 0;

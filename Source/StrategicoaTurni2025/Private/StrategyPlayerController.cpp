@@ -283,7 +283,7 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 					char EndLetter = 'A' + ClickedTile->GetGridPosition().Y;
 					FString UnitInitial = (SelectedUnit->AttackType == EAttackType::RANGED) ? TEXT("S") : TEXT("B");
 
-					FString MoveMsg = FString::Printf(TEXT("HP: %s %c%d -> %c%d"), *UnitInitial, StartLetter, StartNumber, EndLetter, ClickedTile->GetGridPosition().X);
+					FString MoveMsg = FString::Printf(TEXT("HP: %s   %c%d -> %c%d"), *UnitInitial, StartLetter, StartNumber, EndLetter, ClickedTile->GetGridPosition().X);
 					GM->AddGameLog(MoveMsg);
 				}
 

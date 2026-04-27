@@ -171,6 +171,15 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Tower UI")
 	ETowerState StateTowerEast;
 
+	UPROPERTY()
+	AStrategyTower* RefTowerWest;
+
+	UPROPERTY()
+	AStrategyTower* RefTowerMid;
+
+	UPROPERTY()
+	AStrategyTower* RefTowerEast;
+
 protected:
 	virtual void BeginPlay() override;
 

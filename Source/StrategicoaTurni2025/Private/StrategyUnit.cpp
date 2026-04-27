@@ -374,7 +374,7 @@ void AStrategyUnit::ExecuteAIMovement()
 			char StartLetter = 'A' + StartingTile->GetGridPosition().Y;
 			char EndLetter = 'A' + AIBestTargetTile->GetGridPosition().Y;
 
-			FString MoveMsg = FString::Printf(TEXT("AI: %s %c%d -> %c%d"), *UnitInitial, StartLetter, StartingTile->GetGridPosition().X, EndLetter, AIBestTargetTile->GetGridPosition().X);
+			FString MoveMsg = FString::Printf(TEXT("AI: %s   %c%d -> %c%d"), *UnitInitial, StartLetter, StartingTile->GetGridPosition().X, EndLetter, AIBestTargetTile->GetGridPosition().X);
 
 			GM->AddGameLog(MoveMsg);
 		}
@@ -472,7 +472,7 @@ void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
 		char TargetLetter = 'A' + TargetUnit->CurrentTile->GetGridPosition().Y;
 		int32 TargetNumber = TargetUnit->CurrentTile->GetGridPosition().X;
 
-		FString AttackMsg = FString::Printf(TEXT("ATK: %s Attack %c%d (-%d HP)"), *UnitInitial, TargetLetter, TargetNumber, Damage);
+		FString AttackMsg = FString::Printf(TEXT("ATK: %s   %c%d   %d "), *UnitInitial, TargetLetter, TargetNumber, Damage);
 		GM->AddGameLog(AttackMsg);
 	}
 
