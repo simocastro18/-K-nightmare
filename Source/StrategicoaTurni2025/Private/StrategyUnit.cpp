@@ -29,7 +29,6 @@ AStrategyUnit::AStrategyUnit()
 	CurrentHealth = 1;
 	PlayerOwner = -1;
 	CurrentTile = nullptr;
-	//bHasActedThisTurn = false;
 }
 
 void AStrategyUnit::BeginPlay()
@@ -172,7 +171,7 @@ void AStrategyUnit::ExecuteAITurn()
 
 	ATile* TargetTile = nullptr;
 
-	// 1. SEARCH FOR HIGHEST PRIORITY TOWER
+	// 1. Search for highest priority tower
 	TArray<AActor*> AllTowers;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyTower::StaticClass(), AllTowers);
 
@@ -195,7 +194,7 @@ void AStrategyUnit::ExecuteAITurn()
 		}
 	}
 
-	// 2. SEARCH FOR CLOSEST ENEMY
+	// 2. Search for closest enemy
 	AStrategyUnit* ClosestEnemy = nullptr;
 	float MinEnemyDist = 999999.0f;
 
@@ -216,9 +215,11 @@ void AStrategyUnit::ExecuteAITurn()
 		}
 	}
 
-	// 3. BRAIN: TARGET SELECTION
+	// 3. Brain: target selection
 	// Apply a massive weight reduction to tower distance to prioritize objectives
-	if (BestTower && (MinTowerDist - 1500.0f) < MinEnemyDist)
+	const float TowerPriorityOffset = 1500.0f;
+
+	if (BestTower && (MinTowerDist - TowerPriorityOffset) < MinEnemyDist)
 	{
 		// Find a valid, walkable tile within the tower's capture radius (Range 2)
 		for (auto& Elem : GameFieldRef->TileMap)
@@ -243,7 +244,7 @@ void AStrategyUnit::ExecuteAITurn()
 	{
 		if (this->AttackType == EAttackType::RANGED)
 		{
-			// SNIPER BRAIN: Tactical positioning
+			// Sniper brain: Tactical positioning
 			ATile* BestSniperTile = nullptr;
 			int32 MinDistToSniper = 999999;
 
@@ -256,7 +257,7 @@ void AStrategyUnit::ExecuteAITurn()
 					int32 DistToEnemy = FMath::Abs(T->GetGridPosition().X - ClosestEnemy->CurrentTile->GetGridPosition().X) +
 						FMath::Abs(T->GetGridPosition().Y - ClosestEnemy->CurrentTile->GetGridPosition().Y);
 
-					// Rule 1 & 2: Must be within AttackRange AND possess a height advantage or equal footing
+					// Rule 1 and 2: Must be within AttackRange and possess a height advantage or equal footing
 					if (DistToEnemy <= this->AttackRange && T->Elevation >= ClosestEnemy->CurrentTile->Elevation)
 					{
 						// Rule 3: Minimize movement distance to reach the firing position
@@ -284,7 +285,7 @@ void AStrategyUnit::ExecuteAITurn()
 		}
 		else
 		{
-			// BRAWLER BRAIN: Direct confrontation
+			// Brawler brain: Direct confrontation
 			TargetTile = ClosestEnemy->CurrentTile;
 		}
 	}
@@ -298,7 +299,7 @@ void AStrategyUnit::ExecuteAITurn()
 		return;
 	}
 
-	// 4. ALGORITHM EXECUTION
+	// 4. Algorithm execution
 	TArray<ATile*> TargetPath;
 	AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 
@@ -322,11 +323,11 @@ void AStrategyUnit::ExecuteAITurn()
 		if (ClosestEnemy && StepTile == ClosestEnemy->CurrentTile) break;
 
 		int32 ElevationDiff = StepTile->Elevation - AIBestTargetTile->Elevation;
-		int32 StepCost = 1; // Costo Base
+		int32 StepCost = 1; // Base cost
 
 		if (ElevationDiff > 0)
 		{
-			// Costa il doppio del dislivello!
+			// Double cost
 			StepCost = ElevationDiff * 2;
 		}
 
@@ -372,7 +373,7 @@ void AStrategyUnit::ExecuteAIMovement()
 		StartMoving(Path);
 		bHasMovedThisTurn = true;
 
-		// FORMATTED AI MOVEMENT LOG (Requirement 9)
+		// AI movement log 
 		AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 		if (GM && StartingTile)
 		{
@@ -427,7 +428,6 @@ void AStrategyUnit::InitializeUnit(const FString& InUnitLogID, ETeam InUnitTeam,
 	this->CurrentTile = StartingTile;
 	this->OriginalSpawnTile = StartingTile;
 	this->CurrentHealth = MaxHealth;
-	//this->bHasActedThisTurn = false;
 
 	this->PlayerOwner = (InUnitTeam == ETeam::Player) ? 0 : 1;
 
@@ -465,11 +465,11 @@ void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
 {
 	if (!IsValid(TargetUnit) || !IsValid(this->CurrentTile) || !IsValid(TargetUnit->CurrentTile)) return;
 
-	// 1. Calculate and apply base damage
+	// Calculate and apply base damage
 	int32 Damage = CalculateDamageToDeal();
 	TargetUnit->ReceiveDamage(Damage);
 
-	// FORMATTED COMBAT LOG (Requirement 9)
+	// Combat log
 	AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 	if (GM && TargetUnit && TargetUnit->CurrentTile)
 	{
@@ -483,7 +483,7 @@ void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
 		GM->AddGameLog(AttackMsg);
 	}
 
-	// 2. COUNTER-ATTACK RULES
+	// Counter-attack rules
 	if (this->AttackType == EAttackType::RANGED)
 	{
 		int32 DistX = FMath::Abs(this->CurrentTile->GetGridPosition().X - TargetUnit->CurrentTile->GetGridPosition().X);
@@ -498,11 +498,6 @@ void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
 		{
 			int32 CounterDamage = FMath::RandRange(1, 3);
 			this->ReceiveDamage(CounterDamage);
-			//To modify
-			// On-screen debug alert for the counter-attack
-			if (GEngine) {
-				GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Orange, FString::Printf(TEXT("COUNTER-ATTACK! %s takes %d reflect damage!"), *this->UnitLogID, CounterDamage));
-			}
 		}
 	}
 }

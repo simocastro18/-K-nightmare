@@ -4,7 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "Tile.generated.h"
 
-// FORWARD DECLARATIONS 
+// Forward declarations 
 class USceneComponent;
 class UStaticMeshComponent;
 class UMaterialInterface;
@@ -27,7 +27,7 @@ class STRATEGICOATURNI2025_API ATile : public AActor
 public:
 	ATile();
 
-	// COMPONENTS
+	// Components
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	USceneComponent* SceneRoot;
@@ -41,7 +41,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* AttackMesh;
 
-	// TILE VISUALS
+	// Tile visuals
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tile Visuals")
 	UMaterialInterface* PlayerPathMaterial;
@@ -52,7 +52,7 @@ public:
 	UPROPERTY()
 	UMaterialInstanceDynamic* DynamicMaterial;
 
-	// TILE DATA 
+	// Tile data
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tile Data")
 	FIntPoint TileGridPosition;
@@ -76,7 +76,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tile State")
 	bool bIsCurrentlySelected = false;
 
-	// TILE LOGIC 
+	// Tile logic 
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tile")
 	void OnTileDataInitialized();
@@ -92,7 +92,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Tile")
 	void SetUnitOnTile(AActor* NewUnit);
 
-	// VISUAL HIGHLIGHTS 
+	// Visual highlights 
 
 	UFUNCTION(BlueprintCallable, Category = "Tile Visuals")
 	void OnSelectionChanged(bool bIsSelected, bool bIsAI = false);

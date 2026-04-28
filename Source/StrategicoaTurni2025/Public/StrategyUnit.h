@@ -4,7 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "StrategyUnit.generated.h"
 
-// FORWARD DECLARATIONS 
+// Forward declarations 
 class ATile;
 class AGameField;
 class UMaterialInterface;
@@ -35,7 +35,7 @@ class STRATEGICOATURNI2025_API AStrategyUnit : public AActor
 public:
 	AStrategyUnit();
 
-	// FACTION MATERIALS
+	// Faction materials
 
 	UPROPERTY(EditDefaultsOnly, Category = "Unit Visuals")
 	UMaterialInterface* PlayerMaterial;
@@ -43,7 +43,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Unit Visuals")
 	UMaterialInterface* AIMaterial;
 
-	// VISUAL COMPONENTS
+	// Visual components
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	USceneComponent* SceneRoot;
@@ -51,7 +51,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* UnitMesh;
 
-	// BASE STATISTICS
+	// Base statistics
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit Stats")
 	FString UnitLogID;
@@ -80,7 +80,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit Stats")
 	int32 MaxHealth;
 
-	// RUNTIME STATE VARIABLES
+	// Runtime state variables 
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit State")
 	int32 CurrentHealth;
@@ -90,11 +90,8 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit State")
 	ATile* CurrentTile;
-	/*
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Unit State")
-	bool bHasActedThisTurn;
-	*/
-	// COMBAT and LIFECYCLE FUNCTIONS
+
+	// Combat and lifecycle function
 
 	UFUNCTION(BlueprintCallable, Category = "Unit Actions")
 	void ReceiveDamage(int32 DamageAmount);
@@ -108,13 +105,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Unit Actions")
 	void AttackTarget(AStrategyUnit* TargetUnit);
 
-	// AI SYSTEMS
+	// AI system
 
 	// Main entry point for the AI unit to evaluate the board and act
 	UFUNCTION(BlueprintCallable, Category = "AI")
 	void ExecuteAITurn();
 
-	// TURN LOGIC FLAGS
+	// Turn logic flags
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turn Logic")
 	bool bHasMoved = false;
 
@@ -124,7 +121,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turn Logic")
 	bool bIsTurnFinished = false;
 
-	// MOVEMENT SYSTEMS
+	// Movement system
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
 	bool bIsMoving = false;
@@ -142,7 +139,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "References")
 	AGameField* GameFieldRef;
 
-	// INTERNAL AI DATA
+	// Internal AI data
 
 	ATile* AIBestTargetTile = nullptr;
 	FTimerHandle AIThinkTimerHandle;
@@ -151,7 +148,7 @@ public:
 	UFUNCTION()
 	void ExecuteAIMovement();
 
-	// RESPAWN SYSTEMS
+	// Respawn system
 
 	// Caches the deployment tile to allow unit recovery upon death
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Grid")
@@ -161,7 +158,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	void RespawnUnit();
 
-	// BLUEPRINT UI EVENTS 
+	// Blueprint UI events 
 
 	// Hook to instantiate the health bar widget dynamically
 	UFUNCTION(BlueprintImplementableEvent, Category = "Unit UI")

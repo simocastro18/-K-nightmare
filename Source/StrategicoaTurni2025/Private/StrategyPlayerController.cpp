@@ -35,7 +35,7 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 
 	AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 
-	// 1. DEPLOYMENT PHASE HANDLING
+	// 1. Deployment phase handling
 	if (GM && GM->GetCurrentTurnState() == ETurnState::Deployment)
 	{
 		// Prevent player from interacting during the AI deployment turn
@@ -94,7 +94,7 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 		return;
 	}
 
-	// CORE GAMEPLAY VALIDATION: Prevent interaction with obstacles and water tiles
+	// Core gameplay validation: Prevent interaction with obstacles and water tiles
 	if (!ClickedTile->bIsWalkable || ClickedTile->Status == ETileStatus::OBSTACLE)
 	{
 		if (IsValid(CurrentSelectedTile))
@@ -111,7 +111,7 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 		return;
 	}
 
-	// DOUBLE CLICK HANDLING: If the player clicks the already selected tile
+	// Double click handling: If the player clicks the already selected tile
 	if (CurrentSelectedTile == ClickedTile)
 	{
 		bool bIsTryingToWait = false;
@@ -149,7 +149,7 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 		return;
 	}
 
-	// 2. ATTACK EXECUTION (Clicking a red-highlighted enemy tile)
+	// 2. Attack execution (Clicking a red-highlighted enemy tile)
 	if (IsValid(SelectedUnit) && IsValid(GameFieldRef) && GameFieldRef->AttackableTiles.Contains(ClickedTile))
 	{
 		AStrategyUnit* TargetUnit = Cast<AStrategyUnit>(ClickedTile->UnitOnTile);
@@ -171,7 +171,7 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 		}
 	}
 
-	// 3. UNIT SELECTION
+	// 3. Unit selection
 	if (IsValid(ClickedTile->UnitOnTile))
 	{
 		AStrategyUnit* ClickedUnit = Cast<AStrategyUnit>(ClickedTile->UnitOnTile);
@@ -200,7 +200,7 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 
 			if (SelectedUnit == ClickedUnit)
 			{
-				// WAIT LOGIC: Unit skips attack phase and ends its turn
+				// Wait logic: Unit skips attack phase and ends its turn
 				if (SelectedUnit->bHasMovedThisTurn && !SelectedUnit->bHasAttacked)
 				{
 					SelectedUnit->bIsTurnFinished = true;
@@ -248,7 +248,7 @@ void AStrategyPlayerController::HandleTileClick(ATile* ClickedTile)
 			}
 		}
 	}
-	// 4. MOVEMENT EXECUTION (Clicking a blue-highlighted empty tile)
+	// 4. Movement execution (Clicking a blue-highlighted empty tile)
 	else
 	{
 		if (IsValid(SelectedUnit))

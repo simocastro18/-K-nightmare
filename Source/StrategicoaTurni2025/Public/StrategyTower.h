@@ -4,7 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "StrategyTower.generated.h"
 
-// FORWARD DECLARATIONS
+// Forward declarations 
 class UStaticMeshComponent;
 class UMaterialInterface;
 
@@ -30,7 +30,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* TowerMesh;
 
-	// STATE MATERIALS
+	// State materials
 
 	UPROPERTY(EditDefaultsOnly, Category = "Tower Visuals")
 	UMaterialInterface* NeutralMaterial;
