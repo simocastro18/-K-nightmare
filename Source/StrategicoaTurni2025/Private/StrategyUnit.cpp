@@ -29,7 +29,6 @@ AStrategyUnit::AStrategyUnit()
 	CurrentHealth = 1;
 	PlayerOwner = -1;
 	CurrentTile = nullptr;
-	bHasActedThisTurn = false;
 }
 
 void AStrategyUnit::BeginPlay()
@@ -38,6 +37,47 @@ void AStrategyUnit::BeginPlay()
 
 	// Initialize health to maximum upon spawning
 	CurrentHealth = MaxHealth;
+}
+
+void AStrategyUnit::InitializeUnit(const FString& InUnitLogID, ETeam InUnitTeam, float InInitialYaw, ATile* StartingTile)
+{
+	this->UnitLogID = InUnitLogID;
+	this->UnitTeam = InUnitTeam;
+
+	this->CurrentTile = StartingTile;
+	this->OriginalSpawnTile = StartingTile;
+	this->CurrentHealth = MaxHealth;
+
+	this->PlayerOwner = (InUnitTeam == ETeam::Player) ? 0 : 1;
+
+	SetActorRotation(FRotator(0.0f, InInitialYaw, 0.0f));
+
+	// Apply faction specific materials
+	if (UnitMesh)
+	{
+		UMaterialInterface* MatToUse = nullptr;
+
+		if (UnitTeam == ETeam::Player)
+		{
+			MatToUse = PlayerMaterial;
+		}
+		else if (UnitTeam == ETeam::AI)
+		{
+			MatToUse = AIMaterial;
+		}
+
+		if (MatToUse != nullptr)
+		{
+			int32 NumMaterials = UnitMesh->GetNumMaterials();
+			for (int32 i = 0; i < NumMaterials; ++i)
+			{
+				UnitMesh->SetMaterial(i, MatToUse);
+			}
+		}
+	}
+
+	OnSetupHealthBar(UnitTeam);
+	OnHealthChanged(CurrentHealth, MaxHealth);
 }
 
 int32 AStrategyUnit::CalculateDamageToDeal()
@@ -53,10 +93,15 @@ void AStrategyUnit::ReceiveDamage(int32 DamageAmount)
 	// Prevent health from dropping below zero
 	if (CurrentHealth < 0) CurrentHealth = 0;
 
-	// 1. Update the health bar UI
+	if (AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		GM->TriggerUIUpdate(); 
+	}
+
+	// Update the health bar UI
 	OnHealthChanged(CurrentHealth, MaxHealth);
 
-	// 2. Calculate position and spawn floating damage text
+	// Calculate position and spawn floating damage text
 	FVector DamageTextLocation = GetActorLocation() + FVector(0.0f, 0.0f, 150.0f);
 	OnShowFloatingDamage(DamageAmount, DamageTextLocation);
 
@@ -167,7 +212,7 @@ void AStrategyUnit::ExecuteAITurn()
 
 	ATile* TargetTile = nullptr;
 
-	// 1. SEARCH FOR HIGHEST PRIORITY TOWER
+	// 1. Search for highest priority tower
 	TArray<AActor*> AllTowers;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyTower::StaticClass(), AllTowers);
 
@@ -190,7 +235,7 @@ void AStrategyUnit::ExecuteAITurn()
 		}
 	}
 
-	// 2. SEARCH FOR CLOSEST ENEMY
+	// 2. Search for closest enemy
 	AStrategyUnit* ClosestEnemy = nullptr;
 	float MinEnemyDist = 999999.0f;
 
@@ -211,9 +256,11 @@ void AStrategyUnit::ExecuteAITurn()
 		}
 	}
 
-	// 3. BRAIN: TARGET SELECTION
+	// 3. Brain: target selection
 	// Apply a massive weight reduction to tower distance to prioritize objectives
-	if (BestTower && (MinTowerDist - 1500.0f) < MinEnemyDist)
+	const float TowerPriorityOffset = 1500.0f;
+
+	if (BestTower && (MinTowerDist - TowerPriorityOffset) < MinEnemyDist)
 	{
 		// Find a valid, walkable tile within the tower's capture radius (Range 2)
 		for (auto& Elem : GameFieldRef->TileMap)
@@ -238,7 +285,7 @@ void AStrategyUnit::ExecuteAITurn()
 	{
 		if (this->AttackType == EAttackType::RANGED)
 		{
-			// SNIPER BRAIN: Tactical positioning
+			// Sniper brain: Tactical positioning
 			ATile* BestSniperTile = nullptr;
 			int32 MinDistToSniper = 999999;
 
@@ -251,7 +298,7 @@ void AStrategyUnit::ExecuteAITurn()
 					int32 DistToEnemy = FMath::Abs(T->GetGridPosition().X - ClosestEnemy->CurrentTile->GetGridPosition().X) +
 						FMath::Abs(T->GetGridPosition().Y - ClosestEnemy->CurrentTile->GetGridPosition().Y);
 
-					// Rule 1 & 2: Must be within AttackRange AND possess a height advantage or equal footing
+					// Rule 1 and 2: Must be within AttackRange and possess a height advantage or equal footing
 					if (DistToEnemy <= this->AttackRange && T->Elevation >= ClosestEnemy->CurrentTile->Elevation)
 					{
 						// Rule 3: Minimize movement distance to reach the firing position
@@ -279,7 +326,7 @@ void AStrategyUnit::ExecuteAITurn()
 		}
 		else
 		{
-			// BRAWLER BRAIN: Direct confrontation
+			// Brawler brain: Direct confrontation
 			TargetTile = ClosestEnemy->CurrentTile;
 		}
 	}
@@ -293,7 +340,7 @@ void AStrategyUnit::ExecuteAITurn()
 		return;
 	}
 
-	// 4. ALGORITHM EXECUTION
+	// 4. Algorithm execution
 	TArray<ATile*> TargetPath;
 	AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 
@@ -316,7 +363,14 @@ void AStrategyUnit::ExecuteAITurn()
 	{
 		if (ClosestEnemy && StepTile == ClosestEnemy->CurrentTile) break;
 
-		int32 StepCost = (StepTile->Elevation > AIBestTargetTile->Elevation) ? 2 : 1;
+		int32 ElevationDiff = StepTile->Elevation - AIBestTargetTile->Elevation;
+		int32 StepCost = 1; // Base cost
+
+		if (ElevationDiff > 0)
+		{
+			// Double cost
+			StepCost = ElevationDiff * 2;
+		}
 
 		if (AccumulatedCost + StepCost <= MovementRange && StepTile->UnitOnTile == nullptr)
 		{
@@ -360,7 +414,7 @@ void AStrategyUnit::ExecuteAIMovement()
 		StartMoving(Path);
 		bHasMovedThisTurn = true;
 
-		// FORMATTED AI MOVEMENT LOG (Requirement 9)
+		// AI movement log 
 		AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 		if (GM && StartingTile)
 		{
@@ -369,7 +423,7 @@ void AStrategyUnit::ExecuteAIMovement()
 			char StartLetter = 'A' + StartingTile->GetGridPosition().Y;
 			char EndLetter = 'A' + AIBestTargetTile->GetGridPosition().Y;
 
-			FString MoveMsg = FString::Printf(TEXT("AI: %s %c%d -> %c%d"), *UnitInitial, StartLetter, StartingTile->GetGridPosition().X, EndLetter, AIBestTargetTile->GetGridPosition().X);
+			FString MoveMsg = FString::Printf(TEXT("AI: %s   %c%d -> %c%d"), *UnitInitial, StartLetter, StartingTile->GetGridPosition().X, EndLetter, AIBestTargetTile->GetGridPosition().X);
 
 			GM->AddGameLog(MoveMsg);
 		}
@@ -407,57 +461,15 @@ void AStrategyUnit::RespawnUnit()
 	}
 }
 
-void AStrategyUnit::InitializeUnit(const FString& InUnitLogID, ETeam InUnitTeam, float InInitialYaw, ATile* StartingTile)
-{
-	this->UnitLogID = InUnitLogID;
-	this->UnitTeam = InUnitTeam;
-
-	this->CurrentTile = StartingTile;
-	this->OriginalSpawnTile = StartingTile;
-	this->CurrentHealth = MaxHealth;
-	this->bHasActedThisTurn = false;
-
-	this->PlayerOwner = (InUnitTeam == ETeam::Player) ? 0 : 1;
-
-	SetActorRotation(FRotator(0.0f, InInitialYaw, 0.0f));
-
-	// Apply faction specific materials
-	if (UnitMesh)
-	{
-		UMaterialInterface* MatToUse = nullptr;
-
-		if (UnitTeam == ETeam::Player)
-		{
-			MatToUse = PlayerMaterial;
-		}
-		else if (UnitTeam == ETeam::AI)
-		{
-			MatToUse = AIMaterial;
-		}
-
-		if (MatToUse != nullptr)
-		{
-			int32 NumMaterials = UnitMesh->GetNumMaterials();
-			for (int32 i = 0; i < NumMaterials; ++i)
-			{
-				UnitMesh->SetMaterial(i, MatToUse);
-			}
-		}
-	}
-
-	OnSetupHealthBar(UnitTeam);
-	OnHealthChanged(CurrentHealth, MaxHealth);
-}
-
 void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
 {
 	if (!IsValid(TargetUnit) || !IsValid(this->CurrentTile) || !IsValid(TargetUnit->CurrentTile)) return;
 
-	// 1. Calculate and apply base damage
+	// Calculate and apply base damage
 	int32 Damage = CalculateDamageToDeal();
 	TargetUnit->ReceiveDamage(Damage);
 
-	// FORMATTED COMBAT LOG (Requirement 9)
+	// Combat log
 	AStrategyGameMode* GM = Cast<AStrategyGameMode>(GetWorld()->GetAuthGameMode());
 	if (GM && TargetUnit && TargetUnit->CurrentTile)
 	{
@@ -467,11 +479,11 @@ void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
 		char TargetLetter = 'A' + TargetUnit->CurrentTile->GetGridPosition().Y;
 		int32 TargetNumber = TargetUnit->CurrentTile->GetGridPosition().X;
 
-		FString AttackMsg = FString::Printf(TEXT("ATK: %s Attack %c%d (-%d HP)"), *UnitInitial, TargetLetter, TargetNumber, Damage);
+		FString AttackMsg = FString::Printf(TEXT("ATK: %s   %c%d   %d "), *UnitInitial, TargetLetter, TargetNumber, Damage);
 		GM->AddGameLog(AttackMsg);
 	}
 
-	// 2. COUNTER-ATTACK RULES
+	// Counter-attack rules
 	if (this->AttackType == EAttackType::RANGED)
 	{
 		int32 DistX = FMath::Abs(this->CurrentTile->GetGridPosition().X - TargetUnit->CurrentTile->GetGridPosition().X);
@@ -486,11 +498,6 @@ void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)
 		{
 			int32 CounterDamage = FMath::RandRange(1, 3);
 			this->ReceiveDamage(CounterDamage);
-
-			// On-screen debug alert for the counter-attack
-			if (GEngine) {
-				GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Orange, FString::Printf(TEXT("COUNTER-ATTACK! %s takes %d reflect damage!"), *this->UnitLogID, CounterDamage));
-			}
 		}
 	}
 }

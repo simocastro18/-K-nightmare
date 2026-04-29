@@ -14,8 +14,9 @@ AGameField::AGameField()
 void AGameField::BeginPlay()
 {
 	Super::BeginPlay();
-
+	
 	// Graphic Optimization: Force shadows off to ensure consistent performance on any hardware
+	// Shadows ruins this gameplay
 	if (GEngine)
 	{
 		GEngine->Exec(GetWorld(), TEXT("sg.ShadowQuality 0"));
@@ -98,7 +99,11 @@ void AGameField::GenerateGridData()
 
 				NewTile->UpdateTileColor();
 
-				if (!Cell.bIsWalkable)
+				if (!NewTile->bIsWalkable && NewTile->Elevation == 0)
+				{
+					NewTile->SetTileStatus(-1, ETileStatus::WATER);
+				}
+				else if (!NewTile->bIsWalkable)
 				{
 					NewTile->SetTileStatus(-1, ETileStatus::OBSTACLE);
 				}
@@ -132,7 +137,8 @@ bool AGameField::IsMapFullyConnected()
 
 	if (TotalWalkableCells == 0) return false;
 
-	// Algorithm: Breadth-First Search (BFS) / Flood Fill to check map connectivity
+	// Algorithm: Breadth-First Search (BFS)
+	// Flood Fill to check map connectivity
 	TArray<bool> Visited;
 	Visited.Init(false, GridSizeX * GridSizeY);
 
@@ -355,8 +361,16 @@ void AGameField::HighlightReachableTiles(AStrategyUnit* SelectedUnit)
 				// Proceed only if walkable, not an obstacle, and unoccupied
 				if (IsValid(Neighbor) && Neighbor->bIsWalkable && Neighbor->Status != ETileStatus::OBSTACLE && !IsValid(Neighbor->UnitOnTile))
 				{
-					// Moving to a higher elevation costs 2 movement points, otherwise 1
-					int32 StepCost = (Neighbor->Elevation > Current->Elevation) ? 2 : 1;
+					// Movement cost rule
+					int32 ElevationDiff = Neighbor->Elevation - Current->Elevation;
+					int32 StepCost = 1; // Base cost for flat terrain or moving downhill
+
+					if (ElevationDiff > 0)
+					{
+						// Uphill penalty: costs twice the elevation difference
+						StepCost = ElevationDiff * 2;
+					}
+
 					int32 NewCost = CurrentCost + StepCost;
 
 					if (NewCost <= MaxRange)
@@ -399,8 +413,11 @@ TArray<FVector> AGameField::GetPathToTile(ATile* DestinationTile)
 	ATile* CurrentTile = DestinationTile;
 	int32 SafetyCounter = 0;
 
+	// Semantic safety limit: the path can never be longer than the total number of tiles on the map
+	int32 MaxSafeSteps = GridSizeX * GridSizeY;
+
 	// Backtrack from destination to start using the CameFromMap
-	while (IsValid(CurrentTile) && SafetyCounter < 1000)
+	while (IsValid(CurrentTile) && SafetyCounter < MaxSafeSteps)
 	{
 		Path.Add(CurrentTile->GetActorLocation());
 
@@ -576,7 +593,16 @@ TArray<ATile*> AGameField::FindPathAStar(ATile* InStartTile, ATile* InTargetTile
 				if (Neighbor->UnitOnTile != nullptr && Neighbor != InTargetTile)
 					continue;
 
-				int32 StepCost = (Neighbor->Elevation > Current->Elevation) ? 2 : 1;
+				// AI Movement cost rule
+				int32 ElevationDiff = Neighbor->Elevation - Current->Elevation;
+				int32 StepCost = 1; // Base cost
+
+				if (ElevationDiff > 0)
+				{
+					// Uphill penalty: costs twice the elevation difference
+					StepCost = ElevationDiff * 2;
+				}
+
 				int32 TentativeG = GScore[Current] + StepCost;
 
 				if (!OpenSet.Contains(Neighbor))
@@ -592,9 +618,7 @@ TArray<ATile*> AGameField::FindPathAStar(ATile* InStartTile, ATile* InTargetTile
 				CameFromMap.Add(Neighbor, Current);
 				GScore.Add(Neighbor, TentativeG);
 
-				int32 HScore = FMath::Abs(Neighbor->GetGridPosition().X - InTargetTile->GetGridPosition().X) +
-					FMath::Abs(Neighbor->GetGridPosition().Y - InTargetTile->GetGridPosition().Y);
-
+				int32 HScore = FMath::Abs(Neighbor->GetGridPosition().X - InTargetTile->GetGridPosition().X) +	FMath::Abs(Neighbor->GetGridPosition().Y - InTargetTile->GetGridPosition().Y);
 				FScore.Add(Neighbor, TentativeG + HScore);
 			}
 		}
@@ -697,46 +721,67 @@ bool AGameField::HasLineOfSight(ATile* InStartTile, ATile* InTargetTile)
 {
 	if (!InStartTile || !InTargetTile) return false;
 
-	// Algorithm: Bresenham's Line Algorithm
-	// Used for rasterizing a line between two points on a 2D grid using integer arithmetic
+	// ALGORITHM: Bresenham's Line Algorithm
+	// Purpose: To find all the tiles crossed by a straight line between Point A and Point B,
+	// using only integer arithmetic (no floating-point math) for maximum performance.
+
+	// 1. Define the starting coordinates (X0, Y0) and the target coordinates (X1, Y1)
 	int32 X0 = InStartTile->GetGridPosition().X;
 	int32 Y0 = InStartTile->GetGridPosition().Y;
 	int32 X1 = InTargetTile->GetGridPosition().X;
 	int32 Y1 = InTargetTile->GetGridPosition().Y;
 
+	// 2. Calculate the total absolute distance to cover on both axes
 	int32 DX = FMath::Abs(X1 - X0);
 	int32 DY = FMath::Abs(Y1 - Y0);
+
+	// 3. Determine the direction of our "steps" (1 if moving forward/up, -1 if moving backward/down)
 	int32 SX = (X0 < X1) ? 1 : -1;
 	int32 SY = (Y0 < Y1) ? 1 : -1;
+
+	// 4. The Error variable: this acts as an accumulator tracking the line's slope
 	int32 Error = DX - DY;
 
 	int32 StartElevation = InStartTile->Elevation;
 
+	// 5. Start the loop: we walk tile by tile along the theoretical line
 	while (true)
 	{
-		// Exclude the starting and target tiles from the obstacle check
+		// Exclude the collision check for the very first tile (where the attacker is) 
+		// and the very last one (where the target is)
 		if ((X0 != InStartTile->GetGridPosition().X || Y0 != InStartTile->GetGridPosition().Y) &&
 			(X0 != InTargetTile->GetGridPosition().X || Y0 != InTargetTile->GetGridPosition().Y))
 		{
+			// TRACKING IN ACTION! (X0, Y0) represents the tile where the laser currently is.
 			FIntPoint CurrentPoint(X0, Y0);
 			if (ATile** IntersectTilePtr = TileMap.Find(CurrentPoint))
 			{
 				ATile* IntersectTile = *IntersectTilePtr;
 
-				// Elevation Rule: Line of sight is blocked by any tile higher than the attacker's tile
-				if (IntersectTile->Elevation > StartElevation)
+				// Blocking rule: The laser is stopped if the current tile is higher than the attacker's 
+				// starting elevation, or if it's considered a physical Obstacle (e.g., Towers!)
+				if (IntersectTile->Elevation > StartElevation || IntersectTile->Status == ETileStatus::OBSTACLE)
 				{
-					return false;
+					return false; // Obstacle found. Line of Sight is broken!
 				}
 			}
 		}
 
+		// If we reached the exact target coordinates, stop the loop.
 		if (X0 == X1 && Y0 == Y1) break;
 
+		// 6. Calculate the next mathematical step
 		int32 E2 = 2 * Error;
+
+		// Should we take a horizontal step?
 		if (E2 > -DY) { Error -= DY; X0 += SX; }
+
+		// Should we take a vertical step?
 		if (E2 < DX) { Error += DX; Y0 += SY; }
+
+		// (If both conditions are met simultaneously, we step diagonally!)
 	}
 
+	// If the loop finishes without ever hitting an obstacle, the line of sight is perfectly clear!
 	return true;
 }

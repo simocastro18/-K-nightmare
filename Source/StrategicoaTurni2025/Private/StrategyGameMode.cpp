@@ -17,44 +17,6 @@ void AStrategyGameMode::BeginPlay()
 	}
 }
 
-void AStrategyGameMode::HandleGameOver(ETeam Winner)
-{
-	// Activate kill switch to prevent further actions
-	bIsGameOver = true;
-
-	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (!PC) return;
-
-	// Select the appropriate widget based on the winner
-	TSubclassOf<UUserWidget> WidgetToCreate = (Winner == ETeam::Player) ? WinWidgetClass : LoseWidgetClass;
-
-	if (WidgetToCreate)
-	{
-		// Create and display the widget
-		UUserWidget* GameOverWidget = CreateWidget<UUserWidget>(GetWorld(), WidgetToCreate);
-		if (GameOverWidget)
-		{
-			GameOverWidget->AddToViewport();
-
-			// Lock game input and release the mouse cursor to the UI
-			FInputModeUIOnly InputMode;
-			InputMode.SetWidgetToFocus(GameOverWidget->TakeWidget());
-			PC->SetInputMode(InputMode);
-			PC->bShowMouseCursor = true;
-			UGameplayStatics::SetGamePaused(GetWorld(), true);
-		}
-	}
-}
-
-void AStrategyGameMode::RestartGame()
-{
-	// Retrieve the current level name and reload it
-	FString CurrentLevelName = GetWorld()->GetMapName();
-	CurrentLevelName.RemoveFromStart(GetWorld()->StreamingLevelsPrefix);
-
-	UGameplayStatics::OpenLevel(GetWorld(), FName(*CurrentLevelName));
-}
-
 void AStrategyGameMode::StartGameWithConfig(FGameConfig Config)
 {
 	ActiveAIAlgorithm = Config.SelectedAIAlgorithm;
@@ -69,10 +31,34 @@ void AStrategyGameMode::StartGameWithConfig(FGameConfig Config)
 		MapGenerator->SpawnInitialEntities();
 	}
 
+	// Save tower position
+
+	TArray<AActor*> AllTowers;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyTower::StaticClass(), AllTowers);
+	
+	if (AllTowers.Num() >= 3)
+	{
+		AllTowers.Sort([](const AActor& A, const AActor& B) {
+			const AStrategyTower* TowerA = Cast<AStrategyTower>(&A);
+			const AStrategyTower* TowerB = Cast<AStrategyTower>(&B);
+
+			if (TowerA && TowerB)
+			{
+				return TowerA->GridPosition.Y < TowerB->GridPosition.Y;
+			}
+			return false;
+			});
+
+		RefTowerWest = Cast<AStrategyTower>(AllTowers[0]); 
+		RefTowerMid = Cast<AStrategyTower>(AllTowers[1]);  
+		RefTowerEast = Cast<AStrategyTower>(AllTowers[2]);
+	}
+
 	CurrentTurnState = ETurnState::Deployment;
 
 	// Initiate the coin flip to decide who deploys first
 	StartCoinFlipAndDeployment();
+
 }
 
 void AStrategyGameMode::StartCoinFlipAndDeployment()
@@ -117,14 +103,12 @@ void AStrategyGameMode::AdvanceDeployment()
 			AddGameLog(TEXT("=== AI starts ==="));
 			GetWorldTimerManager().SetTimerForNextTick(this, &AStrategyGameMode::ProcessAITurn);
 		}
+
+		TriggerUIUpdate();
 		return;
 	}
 
-	if (bPlayerDeploysNext)
-	{
-		// Wait for the player to use the deployment UI
-	}
-	else
+	if (!bPlayerDeploysNext)
 	{
 		// Trigger AI deployment
 		if (MapGenerator)
@@ -169,6 +153,8 @@ void AStrategyGameMode::EndTurn()
 
 	if (bIsGameOver) return;
 
+	CurrentTurnNumber++;
+
 	TArray<AActor*> AllUnits;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyUnit::StaticClass(), AllUnits);
 
@@ -193,9 +179,10 @@ void AStrategyGameMode::EndTurn()
 	else
 	{
 		CurrentTurnState = ETurnState::PlayerTurn;
-		// Increment the turn number only when a full round is completed
-		CurrentTurnNumber++;
 	}
+
+	// Broadcast: Tell the UI that the turn state or number has changed!
+	TriggerUIUpdate();
 }
 
 void AStrategyGameMode::ProcessAITurn()
@@ -230,6 +217,7 @@ void AStrategyGameMode::ProcessAITurn()
 
 void AStrategyGameMode::EvaluateTowers()
 {
+
 	TArray<AActor*> AllTowers;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AStrategyTower::StaticClass(), AllTowers);
 
@@ -239,6 +227,7 @@ void AStrategyGameMode::EvaluateTowers()
 	PlayerTowerCount = 0;
 	AITowerCount = 0;
 
+	// 1. Calculate new state tower
 	for (AActor* TowerActor : AllTowers)
 	{
 		AStrategyTower* Tower = Cast<AStrategyTower>(TowerActor);
@@ -266,6 +255,7 @@ void AStrategyGameMode::EvaluateTowers()
 
 		ETowerState OldState = Tower->CurrentState;
 
+		// Update actual state
 		if (bPlayerInZone && bAIInZone) Tower->CurrentState = ETowerState::Contested;
 		else if (bPlayerInZone) Tower->CurrentState = ETowerState::ControlledPlayer;
 		else if (bAIInZone) Tower->CurrentState = ETowerState::ControlledAI;
@@ -278,25 +268,20 @@ void AStrategyGameMode::EvaluateTowers()
 		if (Tower->CurrentState == ETowerState::ControlledPlayer) PlayerTowerCount++;
 		else if (Tower->CurrentState == ETowerState::ControlledAI) AITowerCount++;
 	}
+	// Variables for UI
+	if (RefTowerWest) StateTowerWest = RefTowerWest->CurrentState;
+	if (RefTowerMid)  StateTowerMid = RefTowerMid->CurrentState;
+	if (RefTowerEast) StateTowerEast = RefTowerEast->CurrentState;
 
-	// Reset dominance streak if the required 2 towers are not held
-	if (PlayerTowerCount < 2)
-	{
-		PlayerDominanceTurns = 0;
-	}
-	if (AITowerCount < 2)
-	{
-		AIDominanceTurns = 0;
-	}
+	// Win conditions
+	if (PlayerTowerCount < 2) PlayerDominanceTurns = 0;
+	if (AITowerCount < 2) AIDominanceTurns = 0;
 
-	// Increment counter and check for win condition (evaluates after every turn)
 	if (PlayerTowerCount >= 2)
 	{
 		PlayerDominanceTurns++;
-
 		if (PlayerDominanceTurns >= 4)
-		{
-			UE_LOG(LogTemp, Log, TEXT("VICTORY! Player defended 2 towers for 2 full rounds!"));
+		{	
 			AddGameLog(TEXT("VICTORY: You defended the towers!"));
 			this->HandleGameOver(ETeam::Player);
 			return;
@@ -305,21 +290,21 @@ void AStrategyGameMode::EvaluateTowers()
 	else if (AITowerCount >= 2)
 	{
 		AIDominanceTurns++;
-
 		if (AIDominanceTurns >= 4)
-		{
-			UE_LOG(LogTemp, Log, TEXT("DEFEAT! AI defended 2 towers for 2 full rounds!"));
+		{			
 			AddGameLog(TEXT("DEFEAT: AI defended the towers!"));
 			this->HandleGameOver(ETeam::AI);
-			return;
+			return; 
 		}
 	}
+
+	// Signal to UI 
+	TriggerUIUpdate();
 }
 
 FString AStrategyGameMode::GetCellCoordinateName(int32 X, int32 Y)
 {
 	// Convert the Y axis (0-24) to the corresponding letter (A-Y)
-	// ASCII 'A' is 65. 65 + 0 = 'A', 65 + 1 = 'B', etc.
 	char Letter = 'A' + FMath::Clamp(Y, 0, 24);
 
 	// Format the final string (e.g., "C4")
@@ -336,4 +321,43 @@ FString AStrategyGameMode::GetGridLetter(int32 Index)
 {
 	char Letter = 'A' + FMath::Clamp(Index, 0, 24);
 	return FString::Printf(TEXT("%c"), Letter);
+}
+
+void AStrategyGameMode::RestartGame()
+{
+	// Retrieve the current level name and reload it
+	FString CurrentLevelName = GetWorld()->GetMapName();
+	CurrentLevelName.RemoveFromStart(GetWorld()->StreamingLevelsPrefix);
+
+	UGameplayStatics::OpenLevel(GetWorld(), FName(*CurrentLevelName));
+}
+
+
+void AStrategyGameMode::HandleGameOver(ETeam Winner)
+{
+	// Activate kill switch to prevent further actions
+	bIsGameOver = true;
+
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (!PC) return;
+
+	// Select the appropriate widget based on the winner
+	TSubclassOf<UUserWidget> WidgetToCreate = (Winner == ETeam::Player) ? WinWidgetClass : LoseWidgetClass;
+
+	if (WidgetToCreate)
+	{
+		// Create and display the widget
+		UUserWidget* GameOverWidget = CreateWidget<UUserWidget>(GetWorld(), WidgetToCreate);
+		if (GameOverWidget)
+		{
+			GameOverWidget->AddToViewport();
+
+			// Lock game input and release the mouse cursor to the UI
+			FInputModeUIOnly InputMode;
+			InputMode.SetWidgetToFocus(GameOverWidget->TakeWidget());
+			PC->SetInputMode(InputMode);
+			PC->bShowMouseCursor = true;
+			UGameplayStatics::SetGamePaused(GetWorld(), true);
+		}
+	}
 }

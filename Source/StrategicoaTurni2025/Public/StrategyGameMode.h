@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "StrategyTower.h"
 #include "StrategyUnit.h" // Required for the ETeam enum
 #include "StrategyGameMode.generated.h"
 
@@ -47,6 +48,9 @@ enum class ETurnState : uint8
 
 // Delegate used to broadcast game events and combat actions to the UI Log Widget
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGameLogAdded, const FString&, LogMessage);
+
+// Define the Delegate type (No parameters needed, the UI will fetch data directly)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnUIUpdateRequired);
 
 UCLASS()
 class STRATEGICOATURNI2025_API AStrategyGameMode : public AGameModeBase
@@ -150,6 +154,31 @@ public:
 	// Global setting determining the active pathfinding heuristic for enemy units
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game Flow")
 	EAIAlgorithm ActiveAIAlgorithm = EAIAlgorithm::AStar;
+
+	// Expose the delegate to Blueprints so the UI Widget can bind to it
+	UPROPERTY(BlueprintAssignable, Category = "Events")
+	FOnUIUpdateRequired OnUIUpdateRequired;
+
+	// Helper function to trigger the UI update broadcast
+	void TriggerUIUpdate() { OnUIUpdateRequired.Broadcast(); }
+
+	UPROPERTY(BlueprintReadOnly, Category = "Tower UI")
+	ETowerState StateTowerWest;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Tower UI")
+	ETowerState StateTowerMid;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Tower UI")
+	ETowerState StateTowerEast;
+
+	UPROPERTY()
+	AStrategyTower* RefTowerWest;
+
+	UPROPERTY()
+	AStrategyTower* RefTowerMid;
+
+	UPROPERTY()
+	AStrategyTower* RefTowerEast;
 
 protected:
 	virtual void BeginPlay() override;
