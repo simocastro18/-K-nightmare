@@ -16,7 +16,8 @@ enum class ETileStatus : uint8
 {
 	EMPTY      UMETA(DisplayName = "Empty"),
 	OCCUPIED   UMETA(DisplayName = "Occupied"),
-	OBSTACLE   UMETA(DisplayName = "Obstacle")
+	OBSTACLE   UMETA(DisplayName = "Obstacle"),
+	WATER      UMETA(DisplayName = "Water")
 };
 
 UCLASS()
