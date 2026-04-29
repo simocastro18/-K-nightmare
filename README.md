@@ -55,6 +55,12 @@ This project is a **1vs1 strategic turn-based game** (Player vs AI) developed us
 
 ---
 
+## Diagramma UML
+
+![UML Diagram](UML.png)
+
+---
+
 ## Tecnologie Utilizzate / Technologies Used
 
 | Componente | Tecnologia |

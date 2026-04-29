@@ -5,7 +5,7 @@
 #include "GameFramework/PlayerController.h"
 #include "StrategyPlayerController.generated.h"
 
-// FORWARD DECLARATIONS 
+// Forward declarations 
 class ATile;
 class AStrategyUnit;
 class AGameField;
