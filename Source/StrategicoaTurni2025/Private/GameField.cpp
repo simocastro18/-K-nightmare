@@ -757,15 +757,6 @@ bool AGameField::HasLineOfSight(ATile* InStartTile, ATile* InTargetTile)
 			if (ATile** IntersectTilePtr = TileMap.Find(CurrentPoint))
 			{
 				ATile* IntersectTile = *IntersectTilePtr;
-				
-				//DEBUG
-
-				if (GEngine)
-				{
-					GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow,
-						FString::Printf(TEXT("LOS check: tile (%d,%d) elev=%d vs attacker elev=%d"),
-							X0, Y0, IntersectTile->Elevation, StartElevation));
-				}
 
 				// Blocking rule: The laser is stopped if the current tile is higher than the attacker's 
 				// starting elevation, or if it's considered a physical Obstacle (e.g., Towers!)

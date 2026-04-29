@@ -51,10 +51,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Game Logic")
 	void SpawnInitialEntities();
 
-protected:
-	virtual void BeginPlay() override;
-
-public:
 	// Map Generation Settings
 
 	// Determines if the Perlin Noise generator should use a random seed or a fixed one for debugging
@@ -159,6 +155,10 @@ public:
 	// Handles spawning of a specific AI unit based on the deployment sequence
 	UFUNCTION(BlueprintCallable, Category = "Game Logic")
 	void SpawnSingleAIUnit(int32 UnitIndex);
+
+
+protected:
+	virtual void BeginPlay() override;
 
 private:
 	// Validates if every walkable tile on the map is reachable from any other walkable tile

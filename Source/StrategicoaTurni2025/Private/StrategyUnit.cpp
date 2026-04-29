@@ -39,6 +39,47 @@ void AStrategyUnit::BeginPlay()
 	CurrentHealth = MaxHealth;
 }
 
+void AStrategyUnit::InitializeUnit(const FString& InUnitLogID, ETeam InUnitTeam, float InInitialYaw, ATile* StartingTile)
+{
+	this->UnitLogID = InUnitLogID;
+	this->UnitTeam = InUnitTeam;
+
+	this->CurrentTile = StartingTile;
+	this->OriginalSpawnTile = StartingTile;
+	this->CurrentHealth = MaxHealth;
+
+	this->PlayerOwner = (InUnitTeam == ETeam::Player) ? 0 : 1;
+
+	SetActorRotation(FRotator(0.0f, InInitialYaw, 0.0f));
+
+	// Apply faction specific materials
+	if (UnitMesh)
+	{
+		UMaterialInterface* MatToUse = nullptr;
+
+		if (UnitTeam == ETeam::Player)
+		{
+			MatToUse = PlayerMaterial;
+		}
+		else if (UnitTeam == ETeam::AI)
+		{
+			MatToUse = AIMaterial;
+		}
+
+		if (MatToUse != nullptr)
+		{
+			int32 NumMaterials = UnitMesh->GetNumMaterials();
+			for (int32 i = 0; i < NumMaterials; ++i)
+			{
+				UnitMesh->SetMaterial(i, MatToUse);
+			}
+		}
+	}
+
+	OnSetupHealthBar(UnitTeam);
+	OnHealthChanged(CurrentHealth, MaxHealth);
+}
+
 int32 AStrategyUnit::CalculateDamageToDeal()
 {
 	// Extract a random damage value between the class minimum and maximum
@@ -418,47 +459,6 @@ void AStrategyUnit::RespawnUnit()
 		bIsMoving = false;
 		PathToFollow.Empty();
 	}
-}
-
-void AStrategyUnit::InitializeUnit(const FString& InUnitLogID, ETeam InUnitTeam, float InInitialYaw, ATile* StartingTile)
-{
-	this->UnitLogID = InUnitLogID;
-	this->UnitTeam = InUnitTeam;
-
-	this->CurrentTile = StartingTile;
-	this->OriginalSpawnTile = StartingTile;
-	this->CurrentHealth = MaxHealth;
-
-	this->PlayerOwner = (InUnitTeam == ETeam::Player) ? 0 : 1;
-
-	SetActorRotation(FRotator(0.0f, InInitialYaw, 0.0f));
-
-	// Apply faction specific materials
-	if (UnitMesh)
-	{
-		UMaterialInterface* MatToUse = nullptr;
-
-		if (UnitTeam == ETeam::Player)
-		{
-			MatToUse = PlayerMaterial;
-		}
-		else if (UnitTeam == ETeam::AI)
-		{
-			MatToUse = AIMaterial;
-		}
-
-		if (MatToUse != nullptr)
-		{
-			int32 NumMaterials = UnitMesh->GetNumMaterials();
-			for (int32 i = 0; i < NumMaterials; ++i)
-			{
-				UnitMesh->SetMaterial(i, MatToUse);
-			}
-		}
-	}
-
-	OnSetupHealthBar(UnitTeam);
-	OnHealthChanged(CurrentHealth, MaxHealth);
 }
 
 void AStrategyUnit::AttackTarget(AStrategyUnit* TargetUnit)

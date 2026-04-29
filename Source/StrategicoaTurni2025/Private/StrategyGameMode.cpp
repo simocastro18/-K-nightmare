@@ -17,44 +17,6 @@ void AStrategyGameMode::BeginPlay()
 	}
 }
 
-void AStrategyGameMode::HandleGameOver(ETeam Winner)
-{
-	// Activate kill switch to prevent further actions
-	bIsGameOver = true;
-
-	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (!PC) return;
-
-	// Select the appropriate widget based on the winner
-	TSubclassOf<UUserWidget> WidgetToCreate = (Winner == ETeam::Player) ? WinWidgetClass : LoseWidgetClass;
-
-	if (WidgetToCreate)
-	{
-		// Create and display the widget
-		UUserWidget* GameOverWidget = CreateWidget<UUserWidget>(GetWorld(), WidgetToCreate);
-		if (GameOverWidget)
-		{
-			GameOverWidget->AddToViewport();
-
-			// Lock game input and release the mouse cursor to the UI
-			FInputModeUIOnly InputMode;
-			InputMode.SetWidgetToFocus(GameOverWidget->TakeWidget());
-			PC->SetInputMode(InputMode);
-			PC->bShowMouseCursor = true;
-			UGameplayStatics::SetGamePaused(GetWorld(), true);
-		}
-	}
-}
-
-void AStrategyGameMode::RestartGame()
-{
-	// Retrieve the current level name and reload it
-	FString CurrentLevelName = GetWorld()->GetMapName();
-	CurrentLevelName.RemoveFromStart(GetWorld()->StreamingLevelsPrefix);
-
-	UGameplayStatics::OpenLevel(GetWorld(), FName(*CurrentLevelName));
-}
-
 void AStrategyGameMode::StartGameWithConfig(FGameConfig Config)
 {
 	ActiveAIAlgorithm = Config.SelectedAIAlgorithm;
@@ -359,4 +321,43 @@ FString AStrategyGameMode::GetGridLetter(int32 Index)
 {
 	char Letter = 'A' + FMath::Clamp(Index, 0, 24);
 	return FString::Printf(TEXT("%c"), Letter);
+}
+
+void AStrategyGameMode::RestartGame()
+{
+	// Retrieve the current level name and reload it
+	FString CurrentLevelName = GetWorld()->GetMapName();
+	CurrentLevelName.RemoveFromStart(GetWorld()->StreamingLevelsPrefix);
+
+	UGameplayStatics::OpenLevel(GetWorld(), FName(*CurrentLevelName));
+}
+
+
+void AStrategyGameMode::HandleGameOver(ETeam Winner)
+{
+	// Activate kill switch to prevent further actions
+	bIsGameOver = true;
+
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (!PC) return;
+
+	// Select the appropriate widget based on the winner
+	TSubclassOf<UUserWidget> WidgetToCreate = (Winner == ETeam::Player) ? WinWidgetClass : LoseWidgetClass;
+
+	if (WidgetToCreate)
+	{
+		// Create and display the widget
+		UUserWidget* GameOverWidget = CreateWidget<UUserWidget>(GetWorld(), WidgetToCreate);
+		if (GameOverWidget)
+		{
+			GameOverWidget->AddToViewport();
+
+			// Lock game input and release the mouse cursor to the UI
+			FInputModeUIOnly InputMode;
+			InputMode.SetWidgetToFocus(GameOverWidget->TakeWidget());
+			PC->SetInputMode(InputMode);
+			PC->bShowMouseCursor = true;
+			UGameplayStatics::SetGamePaused(GetWorld(), true);
+		}
+	}
 }
