@@ -466,53 +466,83 @@ void AGameField::ClearAttackableTiles()
 void AGameField::HighlightAttackableTiles(AStrategyUnit* AttackingUnit)
 {
 	ClearAttackableTiles();
-
 	if (!IsValid(AttackingUnit) || !IsValid(AttackingUnit->CurrentTile)) return;
 
 	FIntPoint StartPos = AttackingUnit->CurrentTile->GetGridPosition();
 	int32 Range = AttackingUnit->AttackRange;
 
-	// Loop through a bounding box defined by the attack range
-	for (int32 dx = -Range; dx <= Range; ++dx)
+	if (AttackingUnit->AttackType == EAttackType::RANGED)
 	{
-		for (int32 dy = -Range; dy <= Range; ++dy)
+
+		// Sniper rules
+		// 1. Ignores towers and allied/enemy units along the trajectory
+		// 2. Blocked only by elevation (mountains higher than attacker)
+		// 3. Can cross water tiles freely
+		// 4. If multiple enemies in range, only the closest is highlighted
+		ATile* ClosestEnemyTile = nullptr;
+		int32 MinDist = 999999;
+
+		for (int32 dx = -Range; dx <= Range; ++dx)
 		{
-			// Manhattan distance check to form a diamond shape attack area
-			if (FMath::Abs(dx) + FMath::Abs(dy) <= Range)
+			for (int32 dy = -Range; dy <= Range; ++dy)
 			{
+				if (FMath::Abs(dx) + FMath::Abs(dy) > Range) continue;
+
 				FIntPoint CheckPos(StartPos.X + dx, StartPos.Y + dy);
+				ATile** FoundTilePtr = TileMap.Find(CheckPos);
+				if (!FoundTilePtr) continue;
 
-				if (ATile** FoundTilePtr = TileMap.Find(CheckPos))
+				ATile* CheckTile = *FoundTilePtr;
+				if (!IsValid(CheckTile) || CheckTile == AttackingUnit->CurrentTile) continue;
+				if (!IsValid(CheckTile->UnitOnTile)) continue;
+
+				AStrategyUnit* TargetUnit = Cast<AStrategyUnit>(CheckTile->UnitOnTile);
+				if (!IsValid(TargetUnit) || TargetUnit->UnitTeam == AttackingUnit->UnitTeam) continue;
+
+				if (CheckTile->Elevation > AttackingUnit->CurrentTile->Elevation) continue;
+
+				
+				if (!HasLineOfSight(AttackingUnit->CurrentTile, CheckTile)) continue;
+
+				int32 Dist = FMath::Abs(dx) + FMath::Abs(dy);
+				if (Dist < MinDist)
 				{
-					ATile* CheckTile = *FoundTilePtr;
+					MinDist = Dist;
+					ClosestEnemyTile = CheckTile;
+				}
+			}
+		}
 
-					if (IsValid(CheckTile) && CheckTile != AttackingUnit->CurrentTile)
-					{
-						// Target Identification and Friendly Fire check
-						if (IsValid(CheckTile->UnitOnTile))
-						{
-							AStrategyUnit* TargetUnit = Cast<AStrategyUnit>(CheckTile->UnitOnTile);
+		if (IsValid(ClosestEnemyTile))
+		{
+			ClosestEnemyTile->UpdateAttackHighlight(true);
+			AttackableTiles.Add(ClosestEnemyTile);
+		}
+	}
+	else
+	{
+		
+		for (int32 dx = -Range; dx <= Range; ++dx)
+		{
+			for (int32 dy = -Range; dy <= Range; ++dy)
+			{
+				if (FMath::Abs(dx) + FMath::Abs(dy) > Range) continue;
 
-							if (IsValid(TargetUnit) && TargetUnit->UnitTeam != AttackingUnit->UnitTeam)
-							{
-								// Sniper logic: Check Line of Sight against mountains
-								if (AttackingUnit->AttackType == EAttackType::RANGED)
-								{
-									if (!HasLineOfSight(AttackingUnit->CurrentTile, CheckTile))
-									{
-										continue; // Visual is blocked, skip target
-									}
-								}
+				FIntPoint CheckPos(StartPos.X + dx, StartPos.Y + dy);
+				ATile** FoundTilePtr = TileMap.Find(CheckPos);
+				if (!FoundTilePtr) continue;
 
-								// Elevation rule: Can only attack enemies on the same level or lower
-								if (CheckTile->Elevation <= AttackingUnit->CurrentTile->Elevation)
-								{
-									CheckTile->UpdateAttackHighlight(true);
-									AttackableTiles.Add(CheckTile);
-								}
-							}
-						}
-					}
+				ATile* CheckTile = *FoundTilePtr;
+				if (!IsValid(CheckTile) || CheckTile == AttackingUnit->CurrentTile) continue;
+				if (!IsValid(CheckTile->UnitOnTile)) continue;
+
+				AStrategyUnit* TargetUnit = Cast<AStrategyUnit>(CheckTile->UnitOnTile);
+				if (!IsValid(TargetUnit) || TargetUnit->UnitTeam == AttackingUnit->UnitTeam) continue;
+
+				if (CheckTile->Elevation <= AttackingUnit->CurrentTile->Elevation)
+				{
+					CheckTile->UpdateAttackHighlight(true);
+					AttackableTiles.Add(CheckTile);
 				}
 			}
 		}
@@ -752,17 +782,15 @@ bool AGameField::HasLineOfSight(ATile* InStartTile, ATile* InTargetTile)
 		if ((X0 != InStartTile->GetGridPosition().X || Y0 != InStartTile->GetGridPosition().Y) &&
 			(X0 != InTargetTile->GetGridPosition().X || Y0 != InTargetTile->GetGridPosition().Y))
 		{
-			// TRACKING IN ACTION! (X0, Y0) represents the tile where the laser currently is.
 			FIntPoint CurrentPoint(X0, Y0);
 			if (ATile** IntersectTilePtr = TileMap.Find(CurrentPoint))
 			{
 				ATile* IntersectTile = *IntersectTilePtr;
 
-				// Blocking rule: The laser is stopped if the current tile is higher than the attacker's 
-				// starting elevation, or if it's considered a physical Obstacle (e.g., Towers!)
-				if (IntersectTile->Elevation > StartElevation || IntersectTile->Status == ETileStatus::OBSTACLE)
+				// Blocking rule: The laser is stopped ONLY by tiles with higher elevation than the attacker (mountains). Towers and units do not block ranged attacks
+				if (IntersectTile->Elevation > StartElevation)
 				{
-					return false; // Obstacle found. Line of Sight is broken!
+					return false; 
 				}
 			}
 		}
